@@ -1,34 +1,142 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Портфолио — EventPlatform</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Портфолио — Владимир Борин</title>
+  <meta name="description" content="Портфолио — Владимир Борин, CPO / Product Owner: EventPlatform, XFIT, собственные проекты." />
+  <style>
+    :root{
+      --container: 46rem;
+      --base: 20px;
+      --lh: 1.65;
+      --h1: clamp(2rem, 3vw + 1rem, 2.5rem);
+      --h2: clamp(1.5rem, 1.5vw + 1rem, 1.75rem);
+      --h3: 1.25rem;
+      --muted: #666;
+      --rule: #e6e6e6;
+      --px: 1.25rem;
+      --py: 3.5rem;
+      --gap-sm: 1rem;
+      --gap-lg: 2rem;
+    }
+
+    /* Base */
+    html { font-size: 100%; }
+    body{
+      margin: 0;
+      color: #111;
+      background: #fff;
+      font: var(--base)/var(--lh) "Times New Roman", Times, serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .wrap{ max-width: var(--container); margin: 0 auto; padding: var(--py) var(--px); }
+    a{ text-underline-offset: 2px; }
+    p{ margin: 0 0 1rem 0; }
+    ul{ margin: 0.25rem 0 1rem 1.25rem; padding: 0; }
+    li{ margin: 0.25rem 0; }
+    .meta{ color: var(--muted); }
+    .sep{ height: 1px; background: var(--rule); margin: 2rem 0; }
+
+    /* Typography */
+    h1, h2{
+      margin: 0 0 0.75rem 0;
+      line-height: 1.25;
+      font-weight: 700;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    h1{ font-size: var(--h1); }
+    h2{ font-size: var(--h2); margin-top: 2.25rem; }
+    /* All other headings inherit Times New Roman */
+    h3, h4{ margin: 0 0 0.75rem 0; line-height: 1.25; font-weight: 700; }
+    h3{ font-size: var(--h3); margin-top: 1.5rem; }
+    h4{ margin-top: 1.15rem; }
+
+    /* Hero overrides */
+    .hero{ margin-bottom: 2rem; }
+    .hero h1{ font-family: "Times New Roman", Times, serif; font-style: italic; font-weight: 700; }
+    .portrait{ margin: 0.75rem 0 0 0; }
+    .portrait img{ display: block; max-width: 560px; height: auto; }
+    .portrait figcaption{ margin-top: 0.35rem; font-size: 0.9rem; color: var(--muted); text-align: left; }
+
+    /* Roles layout */
+    .roles{ margin-top: 0.5rem; }
+    .role-item{ margin: 0.25rem 0 0.9rem 0; }
+    .role-item .title{ display: block; font-weight: 700; font-style: italic; }
+    .role-item .meta{ display: block; color: var(--muted); }
+
+    /* Topbar */
+    .topbar{ display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 1rem; font-size: 0.95rem; }
+
+    /* Spacers (line breaks) */
+    .lb{ height: var(--gap-sm); }
+    .lb2{ height: var(--gap-lg); }
+
+    /* Projects section */
+    .site-links{ list-style: none; margin: 0.5rem 0 0 0; padding: 0; }
+    .site-links li{ margin: 0 0 0.35rem 0; }
+
+    @media (max-width: 480px){
+      :root{ --base: 18px; }
+      .wrap{ padding-top: 2.25rem; padding-bottom: 2.25rem; }
+      .topbar{ font-size: 0.9rem; }
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>Портфолио</h1>
-    <p>EventPlatform</p>
-    <p>Директор по цифровым продуктам • CPO</p>
-    <p>Февраль 2025 — Настоящее время</p>
-  </header>
+  <main class="wrap">
+    <nav class="topbar">
+      <a href="https://translate.google.com/translate?hl=&sl=ru&tl=en&u=https%3A%2F%2Fvaborin.com%2F" target="_blank" rel="noopener">In English</a>
+    </nav>
 
-  <main>
-    <section>
-      <h2>Опыт</h2>
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="name-title">
+      <h1 id="name-title">Владимир Борин, Chief product officer</h1>
+      <figure class="portrait">
+        <img src="https://optim.tildacdn.com/tild6261-3633-4965-a163-346231306136/-/resize/460x/-/format/webp/photo_2024-11-21_183.jpeg.webp" alt="Владимир Борин" loading="lazy" />
+        <figcaption>Москва, лето 2022</figcaption>
+      </figure>
+    </section>
 
-      <article>
-        <h3>EventPlatform</h3>
-        <p><strong>Владелец продукта (Старший) • Senior Product owner</strong></p>
-        <p>Февраль 2024 — Февраль 2025 (1 год)</p>
+    <!-- Portfolio -->
+    <header>
+      <h1>Портфолио</h1>
+    </header>
+
+    <section aria-labelledby="exp-title">
+      <h2 id="exp-title">Опыт</h2>
+
+      <!-- EventPlatform (current & recent roles) -->
+      <article aria-labelledby="ep-latest">
+        <h3 id="ep-latest"><a href="https://eventplatform.ru/" target="_blank" rel="noopener">EventPlatform</a></h3>
+        <div class="roles">
+          <div class="role-item">
+            <span class="title">Директор по цифровым продуктам • CPO</span>
+            <span class="meta">Февраль 2025 — Настоящее время</span>
+          </div>
+          <div class="role-item">
+            <span class="title">Владелец продукта (Старший) • Senior Product owner</span>
+            <span class="meta">Февраль 2024 — Февраль 2025 (1&nbsp;год)</span>
+          </div>
+        </div>
       </article>
 
-      <article>
-        <h3>XFIT</h3>
-        <p><strong>Владелец продукта (Старший) • Senior Product owner</strong></p>
-        <p>Сентябрь 2021 — Февраль 2024 (2 года и 6 месяцев)</p>
+      <!-- Spacer: two line breaks before next company -->
+      <div class="lb2" aria-hidden="true"></div>
+
+      <!-- XFIT -->
+      <article aria-labelledby="xfit">
+        <h3 id="xfit"><a href="https://www.xfit.ru/" target="_blank" rel="noopener">XFIT</a></h3>
+        <div class="roles">
+          <div class="role-item">
+            <span class="title">Владелец продукта (Старший) • Senior Product Owner</span>
+            <span class="meta">Сентябрь 2021 — Февраль 2024 (2&nbsp;года и&nbsp;6&nbsp;месяцев)</span>
+          </div>
+        </div>
         <p>Лидировал разработку и масштабирование продукта XFIT Point — полностью автоматизированных фитнес-клубов без персонала, в которых весь пользовательский путь клиента лежит через мобильное приложение.</p>
 
+        <div class="lb" aria-hidden="true"></div>
         <h4>Задачи:</h4>
         <ul>
           <li>Мобильное приложение для B2C сегмента от MVP до полного вывода на рынок.</li>
@@ -42,6 +150,7 @@
           <li>Масштабирование проекта, развитие франчайзинговой сети.</li>
         </ul>
 
+        <div class="lb" aria-hidden="true"></div>
         <h4>Достижения:</h4>
         <ul>
           <li>Разработка MVP и запуск функционала клубов Point в мобильном приложении XFIT.</li>
@@ -54,11 +163,21 @@
         </ul>
       </article>
 
-      <article>
-        <h3>EventPlatform</h3>
-        <p><strong>Владелец продукта (Мидл) • Middle Product owner</strong></p>
-        <p>Декабрь 2020 — Сентябрь 2021 (10 месяцев)</p>
+      <!-- Spacer: two line breaks before next company -->
+      <div class="lb2" aria-hidden="true"></div>
 
+      <!-- EventPlatform (earlier roles) -->
+      <article aria-labelledby="ep-early">
+        <h3 id="ep-early"><a href="https://eventplatform.ru/" target="_blank" rel="noopener">EventPlatform</a></h3>
+
+        <div class="roles">
+          <div class="role-item">
+            <span class="title">Владелец продукта (Мидл) • Middle Product owner</span>
+            <span class="meta">Декабрь 2020 — Сентябрь 2021 (10 месяцев)</span>
+          </div>
+        </div>
+
+        <div class="lb" aria-hidden="true"></div>
         <h4>Задачи:</h4>
         <ul>
           <li>Расширение продуктовой линейки компании: исследование рынка, анализ конкурентов и налаживание сотрудничества с компаниями event-индустрии.</li>
@@ -68,19 +187,23 @@
           <li>Создание и ведение внутренней базы знаний компании, актуализация проектоной документации и ТЗ на разработку продуктов.</li>
         </ul>
 
+        <div class="lb" aria-hidden="true"></div>
         <h4>Достижения:</h4>
         <ul>
           <li>В момент обвала event-индустрии в связи с пандемией принял участие в запуске на рынок нового продукта компании, который позволил перевести мероприятия в онлайн.</li>
           <li>Новый продукт (deep.eventplatform.ru) позволил не только сохранить компанию, но и выйти в лидеры индустрии онлайн-мероприятий.</li>
           <li>На текущий момент DeepPlatform является основным продутом компании.</li>
         </ul>
-      </article>
 
-      <article>
-        <h3>EventPlatform</h3>
-        <p><strong>Менеджер проектов • Project manager</strong></p>
-        <p>Июнь 2018 — Декабрь 2020 (2 года и 7 месяцев)</p>
+        <div class="lb" aria-hidden="true"></div>
+        <div class="roles">
+          <div class="role-item">
+            <span class="title">Менеджер проектов • Project manager</span>
+            <span class="meta">Июнь 2018 — Декабрь 2020 (2 года и 7 месяцев)</span>
+          </div>
+        </div>
 
+        <div class="lb" aria-hidden="true"></div>
         <h4>Задачи:</h4>
         <ul>
           <li>Ведение деловой переписки, адаптация проектных процессов под особенности клиента, соблюдение сроков реализации проектов.</li>
@@ -90,38 +213,55 @@
           <li>Регулярные выезды на проекты, общение с подрядчиками/клиентами, контроль работы проектной команды на площадке.</li>
         </ul>
 
+        <div class="lb" aria-hidden="true"></div>
         <h4>Достижения:</h4>
         <ul>
-          <li>Более 70 реализованных IT проектов в роли проектного менеджера (мобильные приложения, WEB платформы, сайты и лендинги, обучающие порталы, офлайн квесты на iPad).</li>
+          <li>Более 70 реализованных IT проектов в роли проектного менеджера (мобильные приложения, WEB платформы, сайты и лендинги, обучающие порталы, офлайн квесты на iPad)</li>
           <li>Среди клиентов: АФК Система, Сбер, Яндекс, QIWI, Роснефть, Совкомбанк, МТС, Johnson &amp; Johnson, Nestle, Skoda, BMW, Audi, KIA, Volvo Trucks, Xiaomi, Siemens и другие.</li>
           <li>Опыт параллельного ведения большого количества проектов (до 5-ти).</li>
         </ul>
       </article>
     </section>
 
-    <section>
-      <h2>Собственные проекты и хобби</h2>
-      <article>
-        <h3>Сеть студий растяжки в Тбилиси</h3>
-        <p><strong>Основатель • Founder</strong></p>
-        <p>Август 2023 — Настоящее время</p>
-      </article>
+    <div class="sep" role="presentation" aria-hidden="true"></div>
 
-      <article>
-        <h3>Дополнительные проекты</h3>
-        <p>Проходил курс по дизайну, делаю сайты «for fun» и для проверки гипотез, некоторые из них:</p>
-        <ul>
-          <li><a href="https://lady-stretch.one">lady-stretch.one</a></li>
-          <li><a href="https://eventplatform.ru">eventplatform.ru</a></li>
-          <li><a href="https://surfphoria.ru">surfphoria.ru</a></li>
-        </ul>
-      </article>
+    <section aria-labelledby="own-title">
+      <h2 id="own-title">Собственные проекты и хобби</h2>
+
+      <ul>
+        <li>
+          <h3><a href="https://lady-stretch.one/" target="_blank" rel="noopener">Сеть студий растяжки в Тбилиси</a></h3>
+          <div class="roles">
+            <div class="role-item">
+              <span class="title">Основатель • Founder</span>
+              <span class="meta">Август 2023 — Настоящее время</span>
+            </div>
+          </div>
+          <p>Крупнейшая сеть студий растяжки в Грузии: 1&nbsp;000&nbsp;+ клиентов, более 5&nbsp;000 подписчиков в Instagram.</p>
+        </li>
+        <li>
+          <p><strong>Проходил курс по дизайну, делаю сайты "for fun" и для проверки гипотез, некоторые из них:</strong></p>
+        </li>
+      </ul>
+
+      <ul class="site-links">
+        <li><a href="https://lady-stretch.one/" target="_blank" rel="noopener">lady-stretch.one</a></li>
+        <li><a href="https://eventplatform.ru/" target="_blank" rel="noopener">eventplatform.ru</a></li>
+        <li><a href="https://surfphoria.ru/" target="_blank" rel="noopener">surfphoria.ru</a></li>
+      </ul>
     </section>
-  </main>
 
-  <footer>
-    <p>© 2025</p>
-    <p><a href="https://t.me">Telegram</a> · <a href="https://www.instagram.com">Instagram</a></p>
-  </footer>
+    <footer>
+      <div class="lb" aria-hidden="true"></div>
+      <div class="lb" aria-hidden="true"></div>
+      <div class="lb" aria-hidden="true"></div>
+      <p>© 2025</p>
+      <p>
+        <a href="https://t.me/vaborin" target="_blank" rel="noopener">Telegram</a>
+        ·
+        <a href="https://www.instagram.com/yanesobaka/" target="_blank" rel="noopener">Instagram</a>
+      </p>
+    </footer>
+  </main>
 </body>
 </html>
