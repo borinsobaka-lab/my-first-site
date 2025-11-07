@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:14
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  planka:
+    image: ghcr.io/plankanban/planka:latest
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    ports:
+      - "1337:1337"
+    volumes:
+      - user-avatars:/app/public/user-avatars
+      - project-background-images:/app/public/project-background-images
+      - project-background-images-thumbnails:/app/public/project-background-images-thumbnails
+      - attachments:/app/public/files
+
+volumes:
+  postgres-data:
+  user-avatars:
+  project-background-images:
+  project-background-images-thumbnails:
+  attachments:

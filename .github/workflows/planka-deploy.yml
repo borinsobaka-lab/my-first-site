@@ -1,0 +1,44 @@
+name: Deploy Planka
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'planka/**'
+      - 'docs/planka-deployment.md'
+      - '.github/workflows/planka-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Recreate .env from secret
+        run: |
+          mkdir -p planka
+          cat <<'ENV_EOF' > planka/.env
+${{ secrets.PLANKA_ENV_FILE }}
+ENV_EOF
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PLANKA_HOST }}
+          username: ${{ secrets.PLANKA_USER }}
+          key: ${{ secrets.PLANKA_SSH_KEY }}
+          source: "planka/docker-compose.yml,planka/.env"
+          target: ${{ secrets.PLANKA_REMOTE_PATH }}
+
+      - name: Deploy with docker compose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PLANKA_HOST }}
+          username: ${{ secrets.PLANKA_USER }}
+          key: ${{ secrets.PLANKA_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.PLANKA_REMOTE_PATH }}
+            docker compose pull
+            docker compose up -d
