@@ -1,0 +1,64 @@
+name: Deploy Planka
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'planka/**'
+      - 'docs/planka-deployment.md'
+      - '.github/workflows/planka-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Recreate .env from secret
+        run: |
+          mkdir -p planka
+          cat <<'ENV_EOF' > planka/.env
+${{ secrets.PLANKA_ENV_FILE }}
+ENV_EOF
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PLANKA_HOST }}
+          username: ${{ secrets.PLANKA_USER }}
+          key: ${{ secrets.PLANKA_SSH_KEY }}
+          source: "planka/docker-compose.yml,planka/Caddyfile,planka/.env"
+          target: ${{ secrets.PLANKA_REMOTE_PATH }}
+
+      - name: Deploy with docker compose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PLANKA_HOST }}
+          username: ${{ secrets.PLANKA_USER }}
+          key: ${{ secrets.PLANKA_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.PLANKA_REMOTE_PATH }}
+            docker compose pull
+            docker compose up -d
+            docker compose ps
+
+      - name: Check public availability
+        if: ${{ secrets.PLANKA_PUBLIC_URL != '' }}
+        env:
+          PLANKA_PUBLIC_URL: ${{ secrets.PLANKA_PUBLIC_URL }}
+        run: |
+          echo "Waiting for $PLANKA_PUBLIC_URL"
+          for attempt in {1..30}; do
+            status=$(curl -fsSL -o /dev/null -w "%{http_code}" "$PLANKA_PUBLIC_URL") || status=000
+            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
+              echo "Planka is reachable (HTTP $status)."
+              exit 0
+            fi
+            echo "Attempt $attempt: got HTTP $status, retrying..."
+            sleep 10
+          done
+          echo "Service is not reachable at $PLANKA_PUBLIC_URL after 5 minutes." >&2
+          curl -Iv "$PLANKA_PUBLIC_URL"
+          exit 1
