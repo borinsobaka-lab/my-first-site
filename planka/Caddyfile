@@ -1,5 +1,15 @@
-{$PLANKA_DOMAIN} {
+# Personal website on main domain
+vaborin.com www.vaborin.com {
+  root * /var/www/html
+  file_server
+  encode gzip
+}
+
+# Planka kanban app on subdomain
+planka.vaborin.com {
   encode gzip
   reverse_proxy planka:1337
-  tls {$PLANKA_TLS_EMAIL}
+  tls {
+    email {$PLANKA_TLS_EMAIL}
+  }
 }
