@@ -28,7 +28,7 @@ ENV_EOF
           host: ${{ secrets.PLANKA_HOST }}
           username: ${{ secrets.PLANKA_USER }}
           key: ${{ secrets.PLANKA_SSH_KEY }}
-          source: "planka/docker-compose.yml,planka/.env"
+          source: "planka/docker-compose.yml,planka/Caddyfile,planka/.env"
           target: ${{ secrets.PLANKA_REMOTE_PATH }}
 
       - name: Deploy with docker compose
@@ -42,3 +42,23 @@ ENV_EOF
             cd ${{ secrets.PLANKA_REMOTE_PATH }}
             docker compose pull
             docker compose up -d
+            docker compose ps
+
+      - name: Check public availability
+        if: ${{ secrets.PLANKA_PUBLIC_URL != '' }}
+        env:
+          PLANKA_PUBLIC_URL: ${{ secrets.PLANKA_PUBLIC_URL }}
+        run: |
+          echo "Waiting for $PLANKA_PUBLIC_URL"
+          for attempt in {1..30}; do
+            status=$(curl -fsSL -o /dev/null -w "%{http_code}" "$PLANKA_PUBLIC_URL") || status=000
+            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
+              echo "Planka is reachable (HTTP $status)."
+              exit 0
+            fi
+            echo "Attempt $attempt: got HTTP $status, retrying..."
+            sleep 10
+          done
+          echo "Service is not reachable at $PLANKA_PUBLIC_URL after 5 minutes." >&2
+          curl -Iv "$PLANKA_PUBLIC_URL"
+          exit 1

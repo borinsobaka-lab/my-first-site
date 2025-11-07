@@ -67,17 +67,19 @@
 
     <h2>Структура репозитория</h2>
     <ul>
-      <li><code>planka/docker-compose.yml</code> — оркестрация Planka и PostgreSQL.</li>
+      <li><code>planka/docker-compose.yml</code> — оркестрация Planka, PostgreSQL и Caddy.</li>
       <li><code>planka/.env.example</code> — шаблон переменных окружения.</li>
-      <li><code>.github/workflows/planka-deploy.yml</code> — GitHub Actions для доставки.</li>
+      <li><code>planka/Caddyfile</code> — базовая конфигурация обратного прокси.</li>
+      <li><code>.github/workflows/planka-deploy.yml</code> — GitHub Actions для доставки и проверки.</li>
       <li><code>.gitignore</code> — исключает приватный файл <code>planka/.env</code>.</li>
     </ul>
 
     <h2>Готовим файл <code>.env</code></h2>
     <ol>
       <li>Скопируйте <code>planka/.env.example</code> в <code>planka/.env</code>.</li>
-      <li>Заполните URL сервиса, секретный ключ, данные администратора и параметры PostgreSQL.</li>
-      <li>Добавьте SMTP-настройки, если нужна почта.</li>
+      <li>Укажите публичный адрес сервиса: <code>BASE_URL</code> (например, <code>https://planka.example.com</code>), домен без протокола для Caddy в <code>PLANKA_DOMAIN</code> и e-mail администратора в <code>PLANKA_TLS_EMAIL</code>.</li>
+      <li>Заполните секретный ключ, данные администратора и параметры PostgreSQL.</li>
+      <li>Добавьте SMTP-настройки, если нужна почта, и при необходимости OAuth-провайдеры.</li>
       <li>Содержимое файла сохраните в секрете GitHub <code>PLANKA_ENV_FILE</code>.</li>
     </ol>
 
@@ -89,6 +91,7 @@
       <li><code>PLANKA_USER</code> — SSH-пользователь.</li>
       <li><code>PLANKA_SSH_KEY</code> — приватный SSH-ключ.</li>
       <li><code>PLANKA_REMOTE_PATH</code> — путь вроде <code>/opt/planka</code>.</li>
+      <li><code>PLANKA_PUBLIC_URL</code> — (опционально) публичный URL для автоматической проверки доступности.</li>
     </ul>
 
     <h2>Подготовка сервера</h2>
@@ -98,34 +101,50 @@ sudo usermod -aG docker $USER
 sudo mkdir -p /opt/planka
 sudo chown $USER:$USER /opt/planka</code></pre>
 
+    <p>Откройте во внешнем файрволе/безопасности провайдера порты <code>80</code> и <code>443</code> — их будет слушать контейнер Caddy, автоматически выпуская сертификаты Let's Encrypt.</p>
+
+    <p>Отдельно устанавливать Caddy не нужно: он запускается внутри Docker Compose и проксирует запросы к приложению.</p>
+
     <h2>Workflow GitHub Actions</h2>
     <p>Файл <code>planka-deploy.yml</code> выполняет следующие шаги:</p>
     <ol>
       <li>Чекаутит код.</li>
       <li>Создаёт <code>planka/.env</code> из секрета.</li>
-      <li>Отправляет <code>docker-compose.yml</code> и <code>.env</code> на сервер через <code>scp</code>.</li>
-      <li>Запускает <code>docker compose pull</code> и <code>docker compose up -d</code>.</li>
+      <li>Отправляет <code>docker-compose.yml</code>, <code>Caddyfile</code> и <code>.env</code> на сервер через <code>scp</code>.</li>
+      <li>Выполняет <code>docker compose pull</code>, <code>docker compose up -d</code> и выводит статус контейнеров.</li>
+      <li>При наличии секрета <code>PLANKA_PUBLIC_URL</code> пытается обратиться к сайту из GitHub Actions и завершится ошибкой, если ответ не будет получен.</li>
     </ol>
-    <p>Запустить его можно вручную или просто сделать commit/ push в ветку <code>main</code>.</p>
+    <p>Запустить его можно вручную или просто сделать commit/push в ветку <code>main</code>. Успешное выполнение заключительного шага подтверждает, что Planka открывается из интернета.</p>
 
     <h2>Проксирование через Caddy</h2>
-    <p>Создайте файл <code>planka/Caddyfile</code> на сервере и подключите его к Caddy:</p>
-    <pre><code>planka.example.com {
+    <p>Контейнер Caddy запускается автоматически и получает настройки из <code>planka/Caddyfile</code>. Базовая конфигурация использует переменные окружения из <code>.env</code>:</p>
+    <pre><code>{$PLANKA_DOMAIN} {
   encode gzip
-  reverse_proxy 127.0.0.1:1337
+  reverse_proxy planka:1337
+  tls {$PLANKA_TLS_EMAIL}
 }</code></pre>
 
     <h2>Проверяем результат</h2>
     <ol>
       <li>Запустите workflow «Deploy Planka».</li>
       <li>На сервере выполните <code>docker compose ps</code> и <code>docker compose logs -f planka</code>.</li>
+      <li>С локальной машины проверьте HTTP-ответ: <code>curl -I https://planka.example.com</code> — код <code>200</code> или <code>302</code> подтвердит доступность.</li>
       <li>Откройте <code>https://planka.example.com</code> и войдите под админом.</li>
+    </ol>
+
+    <h3>Если сайт не открывается</h3>
+    <ol>
+      <li>Убедитесь, что workflow завершился без ошибок. Если шаг «Check public availability» упал, изучите вывод <code>curl -Iv</code> в логах.</li>
+      <li>На сервере проверьте контейнеры: <code>docker compose ps</code>, <code>docker compose logs caddy</code> и <code>docker compose logs planka</code>.</li>
+      <li>Проверьте DNS: <code>dig +short planka.example.com</code> должен возвращать IP вашего сервера.</li>
+      <li>Разрешите порты <code>80</code> и <code>443</code> во внешнем файрволе провайдера.</li>
     </ol>
 
     <h2>Обновления и безопасность</h2>
     <ul>
       <li>После первого входа смените пароль администратора.</li>
       <li>Для обновления версии измените тег образа в <code>docker-compose.yml</code> и перезапустите workflow.</li>
+      <li>Проверяйте, что шаг «Check public availability» завершается успешно — это гарантирует доступ к сервису из сети.</li>
       <li>Делайте резервные копии томов Docker: <code>postgres-data</code>, <code>attachments</code> и других.</li>
     </ul>
 

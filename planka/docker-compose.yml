@@ -20,13 +20,29 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-    ports:
-      - "1337:1337"
+    expose:
+      - "1337"
     volumes:
       - user-avatars:/app/public/user-avatars
       - project-background-images:/app/public/project-background-images
       - project-background-images-thumbnails:/app/public/project-background-images-thumbnails
       - attachments:/app/public/files
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - planka
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      PLANKA_DOMAIN: ${PLANKA_DOMAIN}
+      PLANKA_TLS_EMAIL: ${PLANKA_TLS_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   postgres-data:
@@ -34,3 +50,5 @@ volumes:
   project-background-images:
   project-background-images-thumbnails:
   attachments:
+  caddy-data:
+  caddy-config:

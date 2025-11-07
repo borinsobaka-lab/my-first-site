@@ -1,4 +1,5 @@
-planka.example.com {
+{$PLANKA_DOMAIN} {
   encode gzip
-  reverse_proxy 127.0.0.1:1337
+  reverse_proxy planka:1337
+  tls {$PLANKA_TLS_EMAIL}
 }
