@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppSettings, RecordingState, DEFAULT_SETTINGS } from '../../shared/types';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { transcribe } from './services/whisper';
-import { postProcessText } from './services/postprocess';
 import { playStartSound, playStopSound, playErrorSound } from './services/sounds';
 import Settings from './components/Settings';
 import StatusIndicator from './components/StatusIndicator';
@@ -38,11 +37,11 @@ const App: React.FC = () => {
   const [showAbout, setShowAbout] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder();
   const settingsRef = useRef(settings);
   const isRecordingRef = useRef(false);
+  const recordingStartTimeRef = useRef<number | null>(null);
 
   // Keep refs updated
   useEffect(() => {
@@ -110,7 +109,7 @@ const App: React.FC = () => {
 
     setError(null);
     setState('recording');
-    setRecordingStartTime(Date.now());
+    recordingStartTimeRef.current = Date.now();
 
     // Play start sound if enabled
     if (settingsRef.current.soundEnabled) {
@@ -133,9 +132,10 @@ const App: React.FC = () => {
   const handleStopRecording = useCallback(async () => {
     if (!isRecordingRef.current) return;
 
-    // Calculate recording duration
-    const durationSeconds = recordingStartTime
-      ? Math.round((Date.now() - recordingStartTime) / 1000)
+    // Calculate recording duration using ref
+    const startTime = recordingStartTimeRef.current;
+    const durationSeconds = startTime
+      ? Math.round((Date.now() - startTime) / 1000)
       : 0;
 
     // Play stop sound if enabled
@@ -170,14 +170,9 @@ const App: React.FC = () => {
       }
 
       // Transcribe audio
-      let text = await transcribe(audioBlob, settingsRef.current.apiKey, {
+      const text = await transcribe(audioBlob, settingsRef.current.apiKey, {
         language: settingsRef.current.language,
       });
-
-      // Post-process if enabled
-      if (settingsRef.current.postProcessing) {
-        text = postProcessText(text);
-      }
 
       // Add to history
       const historyItem: HistoryItem = {
@@ -209,7 +204,7 @@ const App: React.FC = () => {
       setState('error');
       window.electronAPI.syncRecordingState(false);
     }
-  }, [stopRecording, recordingStartTime]);
+  }, [stopRecording]);
 
   const handleCancel = useCallback(async () => {
     if (isRecording) {
@@ -410,9 +405,6 @@ const App: React.FC = () => {
                   <li>Текст копируется в буфер обмена — вставьте через Ctrl+V</li>
                 ) : (
                   <li>Текст автоматически вставляется в активное поле</li>
-                )}
-                {settings.postProcessing && (
-                  <li>Произнесите «точка», «запятая», «новая строка» для пунктуации</li>
                 )}
               </ul>
             </div>

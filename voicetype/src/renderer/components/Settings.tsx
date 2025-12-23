@@ -282,24 +282,6 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
         </p>
       </div>
 
-      {/* Post-processing */}
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={localSettings.postProcessing}
-            onChange={(e) => handleChange('postProcessing', e.target.checked)}
-            className="rounded text-primary-600 focus:ring-primary-500"
-          />
-          <span className="text-sm font-medium text-gray-700">
-            Постобработка текста
-          </span>
-        </label>
-        <p className="text-xs text-gray-500 ml-6">
-          Распознавание команд: «точка», «запятая», «новая строка»
-        </p>
-      </div>
-
       {/* Auto-start */}
       <div className="space-y-2">
         <label className="flex items-center gap-2 cursor-pointer">

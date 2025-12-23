@@ -5,27 +5,35 @@ type InsertMode = 'type' | 'clipboard';
 let nutjsAvailable = false;
 let keyboard: any = null;
 let Key: any = null;
+let nutjsLoading: Promise<boolean> | null = null;
 
 // Try to load nut-js fork
 async function loadNutJs(): Promise<boolean> {
-  try {
-    const nutjs = await import('@nut-tree-fork/nut-js');
-    keyboard = nutjs.keyboard;
-    Key = nutjs.Key;
+  if (nutjsAvailable) return true;
+  if (nutjsLoading) return nutjsLoading;
 
-    // Configure nut-js for faster typing
-    if (keyboard && keyboard.config) {
-      keyboard.config.autoDelayMs = 0;
+  nutjsLoading = (async () => {
+    try {
+      const nutjs = await import('@nut-tree-fork/nut-js');
+      keyboard = nutjs.keyboard;
+      Key = nutjs.Key;
+
+      // Configure nut-js for faster typing
+      if (keyboard && keyboard.config) {
+        keyboard.config.autoDelayMs = 0;
+      }
+
+      nutjsAvailable = true;
+      console.log('nut-js loaded successfully');
+      return true;
+    } catch (error) {
+      console.warn('nut-js not available, using clipboard fallback:', error);
+      nutjsAvailable = false;
+      return false;
     }
+  })();
 
-    nutjsAvailable = true;
-    console.log('nut-js loaded successfully');
-    return true;
-  } catch (error) {
-    console.warn('nut-js not available, using clipboard fallback:', error);
-    nutjsAvailable = false;
-    return false;
-  }
+  return nutjsLoading;
 }
 
 // Initialize nut-js on module load
@@ -37,6 +45,9 @@ loadNutJs();
  * @param mode - 'type' to simulate keyboard typing, 'clipboard' to copy only
  */
 export async function insertText(text: string, mode: InsertMode): Promise<void> {
+  // Ensure nut-js is loaded before proceeding
+  await loadNutJs();
+
   if (mode === 'clipboard') {
     // Clipboard mode: just copy text, user pastes manually
     await copyToClipboard(text);
@@ -63,14 +74,20 @@ async function copyAndPaste(text: string): Promise<void> {
   clipboard.writeText(text);
   console.log('Text copied to clipboard for pasting');
 
-  // Give time for the window to regain focus
-  await new Promise(resolve => setTimeout(resolve, 200));
+  // Longer delay to ensure the previous window regains focus
+  // When VoiceType processes the audio, the user's window might lose focus momentarily
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   // Try to simulate Ctrl+V if nut-js is available
   if (nutjsAvailable && keyboard && Key) {
     try {
       const isMac = process.platform === 'darwin';
       const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
+
+      console.log('Attempting to paste with nut-js...');
+
+      // Small delay before key press
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Press and release the paste shortcut
       await keyboard.pressKey(modifierKey, Key.V);

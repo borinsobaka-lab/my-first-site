@@ -36,10 +36,6 @@ const schema = {
     type: 'boolean' as const,
     default: DEFAULT_SETTINGS.autoStart,
   },
-  postProcessing: {
-    type: 'boolean' as const,
-    default: DEFAULT_SETTINGS.postProcessing,
-  },
   soundEnabled: {
     type: 'boolean' as const,
     default: DEFAULT_SETTINGS.soundEnabled,
@@ -69,7 +65,6 @@ class SettingsManager {
       insertMode: this.store.get('insertMode'),
       selectedMicrophone: this.store.get('selectedMicrophone'),
       autoStart: this.store.get('autoStart'),
-      postProcessing: this.store.get('postProcessing'),
       soundEnabled: this.store.get('soundEnabled'),
       totalRecordingSeconds: this.store.get('totalRecordingSeconds'),
     };

@@ -7,7 +7,6 @@ export interface AppSettings {
   insertMode: 'type' | 'clipboard';
   selectedMicrophone: string | null;
   autoStart: boolean;
-  postProcessing: boolean;
   soundEnabled: boolean;
   totalRecordingSeconds: number;
 }
@@ -58,7 +57,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   insertMode: 'type',
   selectedMicrophone: null,
   autoStart: false,
-  postProcessing: false,
   soundEnabled: true,
   totalRecordingSeconds: 0,
 };
