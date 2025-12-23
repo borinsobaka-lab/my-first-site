@@ -1,4 +1,8 @@
 import { clipboard } from 'electron';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 type InsertMode = 'type' | 'clipboard';
 
@@ -18,7 +22,7 @@ async function loadNutJs(): Promise<boolean> {
       keyboard = nutjs.keyboard;
       Key = nutjs.Key;
 
-      // Configure nut-js for faster typing
+      // Configure nut-js for faster operation
       if (keyboard && keyboard.config) {
         keyboard.config.autoDelayMs = 0;
       }
@@ -27,7 +31,7 @@ async function loadNutJs(): Promise<boolean> {
       console.log('nut-js loaded successfully');
       return true;
     } catch (error) {
-      console.warn('nut-js not available, using clipboard fallback:', error);
+      console.warn('nut-js not available:', error);
       nutjsAvailable = false;
       return false;
     }
@@ -45,75 +49,143 @@ loadNutJs();
  * @param mode - 'type' to simulate keyboard typing, 'clipboard' to copy only
  */
 export async function insertText(text: string, mode: InsertMode): Promise<void> {
-  // Ensure nut-js is loaded before proceeding
-  await loadNutJs();
-
   if (mode === 'clipboard') {
     // Clipboard mode: just copy text, user pastes manually
-    await copyToClipboard(text);
-  } else {
-    // Type mode: copy to clipboard and simulate Ctrl+V paste
-    await copyAndPaste(text);
+    clipboard.writeText(text);
+    console.log('Text copied to clipboard');
+    return;
   }
-}
 
-/**
- * Simply copy text to clipboard (for clipboard mode)
- */
-async function copyToClipboard(text: string): Promise<void> {
-  clipboard.writeText(text);
-  console.log('Text copied to clipboard:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
+  // Type mode: copy to clipboard and simulate Ctrl+V paste
+  await copyAndPaste(text);
 }
 
 /**
  * Copy text to clipboard and simulate paste
- * This is more reliable than direct typing on most systems
  */
 async function copyAndPaste(text: string): Promise<void> {
-  // Copy text to clipboard
+  // Copy text to clipboard first
   clipboard.writeText(text);
-  console.log('Text copied to clipboard for pasting');
+  console.log('Text copied to clipboard for auto-paste');
 
-  // Wait for the target window to have focus
-  // The main window should already be hidden by ipc.ts at this point
-  await new Promise(resolve => setTimeout(resolve, 200));
+  // Wait for the target window to have focus (window should already be hidden by ipc.ts)
+  await delay(200);
 
-  // Try to simulate Ctrl+V if nut-js is available
-  if (nutjsAvailable && keyboard && Key) {
-    try {
-      const isMac = process.platform === 'darwin';
-      const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
+  // Try platform-specific paste methods
+  const platform = process.platform;
+  let pasted = false;
 
-      console.log('Simulating Ctrl+V paste...');
-
-      // Press modifier key
-      await keyboard.pressKey(modifierKey);
-      await new Promise(resolve => setTimeout(resolve, 30));
-
-      // Press V
-      await keyboard.pressKey(Key.V);
-      await new Promise(resolve => setTimeout(resolve, 30));
-
-      // Release V
-      await keyboard.releaseKey(Key.V);
-      await new Promise(resolve => setTimeout(resolve, 30));
-
-      // Release modifier
-      await keyboard.releaseKey(modifierKey);
-
-      console.log('Paste command sent successfully');
-    } catch (error) {
-      console.error('Error pasting with nut-js:', error);
-      console.log('Text is in clipboard. Please paste manually (Ctrl+V)');
-    }
-  } else {
-    console.log('nut-js not available. Text copied to clipboard - paste manually with Ctrl+V');
+  if (platform === 'win32') {
+    // On Windows, try PowerShell method first (most reliable)
+    pasted = await pasteWithPowerShell();
   }
+
+  if (!pasted && platform === 'darwin') {
+    // On macOS, try AppleScript
+    pasted = await pasteWithAppleScript();
+  }
+
+  // Fallback to nut-js if native method failed
+  if (!pasted) {
+    await loadNutJs();
+    if (nutjsAvailable) {
+      pasted = await pasteWithNutJs();
+    }
+  }
+
+  if (!pasted) {
+    console.log('All paste methods failed. Text is in clipboard - paste manually with Ctrl+V');
+  }
+}
+
+/**
+ * Paste using PowerShell (Windows)
+ * Uses .NET SendKeys which is very reliable
+ */
+async function pasteWithPowerShell(): Promise<boolean> {
+  try {
+    console.log('Attempting paste with PowerShell...');
+
+    // Use PowerShell to send Ctrl+V via Windows Forms SendKeys
+    // ^v means Ctrl+V in SendKeys notation
+    const script = `Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 100; [System.Windows.Forms.SendKeys]::SendWait('^v')`;
+
+    await execAsync(`powershell -NoProfile -NonInteractive -Command "${script}"`, {
+      windowsHide: true,
+    });
+
+    console.log('Paste with PowerShell successful');
+    return true;
+  } catch (error) {
+    console.error('PowerShell paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Paste using AppleScript (macOS)
+ */
+async function pasteWithAppleScript(): Promise<boolean> {
+  try {
+    console.log('Attempting paste with AppleScript...');
+
+    await execAsync(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`);
+
+    console.log('Paste with AppleScript successful');
+    return true;
+  } catch (error) {
+    console.error('AppleScript paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Paste using nut-js (cross-platform fallback)
+ */
+async function pasteWithNutJs(): Promise<boolean> {
+  if (!nutjsAvailable || !keyboard || !Key) {
+    return false;
+  }
+
+  try {
+    console.log('Attempting paste with nut-js...');
+
+    const isMac = process.platform === 'darwin';
+    const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
+
+    // Press modifier
+    await keyboard.pressKey(modifierKey);
+    await delay(50);
+
+    // Press V
+    await keyboard.pressKey(Key.V);
+    await delay(50);
+
+    // Release V
+    await keyboard.releaseKey(Key.V);
+    await delay(50);
+
+    // Release modifier
+    await keyboard.releaseKey(modifierKey);
+
+    console.log('Paste with nut-js successful');
+    return true;
+  } catch (error) {
+    console.error('nut-js paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Simple delay helper
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
  * Check if text input simulation is available
  */
 export function isTypingAvailable(): boolean {
-  return nutjsAvailable;
+  return nutjsAvailable || process.platform === 'win32' || process.platform === 'darwin';
 }
