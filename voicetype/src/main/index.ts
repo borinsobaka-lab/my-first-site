@@ -1,13 +1,20 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import * as path from 'path';
 import { setupIPC } from './ipc';
-import { registerHotkey, unregisterAllShortcuts } from './shortcuts';
+import { registerHotkey, unregisterAllShortcuts, setupRecordingStateSync } from './shortcuts';
 import { createTray, destroyTray, updateTrayState } from './tray';
 import { IPC_CHANNELS, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
-if (require('electron-squirrel-startup')) {
+let squirrelStartup = false;
+try {
+  squirrelStartup = require('electron-squirrel-startup');
+} catch {
+  // Not in production build
+}
+
+if (squirrelStartup) {
   app.quit();
 }
 
@@ -19,7 +26,7 @@ function createWindow(): void {
   // Create the browser window
   mainWindow = new BrowserWindow({
     width: 500,
-    height: 600,
+    height: 700,
     minWidth: 400,
     minHeight: 500,
     resizable: true,
@@ -51,7 +58,7 @@ function createWindow(): void {
 
   // Hide window instead of closing (minimize to tray)
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
+    if (!(app as any).isQuitting) {
       event.preventDefault();
       mainWindow?.hide();
     }
@@ -59,6 +66,9 @@ function createWindow(): void {
 
   // Setup IPC handlers
   setupIPC(mainWindow);
+
+  // Setup recording state sync from renderer
+  setupRecordingStateSync();
 
   // Register global hotkey
   registerHotkey(mainWindow);

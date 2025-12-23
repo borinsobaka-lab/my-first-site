@@ -1,8 +1,7 @@
-import { globalShortcut, BrowserWindow } from 'electron';
+import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
 import { sendRecordingStart, sendRecordingStop } from './ipc';
 import settingsManager from './settings';
-
-type HotkeyMode = 'push-to-talk' | 'toggle';
+import { IPC_CHANNELS } from '../../shared/types';
 
 let isRecording = false;
 let currentHotkey: string | null = null;
@@ -24,7 +23,6 @@ function parseHotkey(hotkey: string): string {
 export function registerHotkey(window: BrowserWindow): boolean {
   mainWindowRef = window;
   const hotkey = settingsManager.get('hotkey');
-  const mode = settingsManager.get('hotkeyMode');
 
   // Unregister existing hotkey if any
   if (currentHotkey) {
@@ -39,12 +37,12 @@ export function registerHotkey(window: BrowserWindow): boolean {
 
   try {
     const registered = globalShortcut.register(accelerator, () => {
-      handleHotkeyPress(mode);
+      handleHotkeyPress();
     });
 
     if (registered) {
       currentHotkey = hotkey;
-      console.log(`Hotkey registered: ${accelerator} (mode: ${mode})`);
+      console.log(`Hotkey registered: ${accelerator}`);
       return true;
     } else {
       console.error(`Failed to register hotkey: ${accelerator}`);
@@ -57,27 +55,16 @@ export function registerHotkey(window: BrowserWindow): boolean {
 }
 
 /**
- * Handle hotkey press based on mode
+ * Handle hotkey press - toggle recording
  */
-function handleHotkeyPress(mode: HotkeyMode): void {
+function handleHotkeyPress(): void {
   if (!mainWindowRef) return;
 
-  if (mode === 'toggle') {
-    // Toggle mode: press once to start, press again to stop
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+  // Toggle recording state
+  if (isRecording) {
+    stopRecording();
   } else {
-    // Push-to-talk mode is handled by key down/up events
-    // For simplicity with globalShortcut, we treat it as toggle
-    // Note: True push-to-talk would require native key hooks
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
+    startRecording();
   }
 }
 
@@ -89,7 +76,7 @@ function startRecording(): void {
 
   isRecording = true;
   sendRecordingStart(mainWindowRef);
-  console.log('Recording started');
+  console.log('Recording started via hotkey');
 }
 
 /**
@@ -100,7 +87,18 @@ function stopRecording(): void {
 
   isRecording = false;
   sendRecordingStop(mainWindowRef);
-  console.log('Recording stopped');
+  console.log('Recording stopped via hotkey');
+}
+
+/**
+ * Setup IPC listeners for recording state sync from renderer
+ */
+export function setupRecordingStateSync(): void {
+  // Sync recording state from renderer
+  ipcMain.on('recording:state-sync', (_event, recording: boolean) => {
+    isRecording = recording;
+    console.log('Recording state synced from renderer:', recording);
+  });
 }
 
 /**
@@ -108,6 +106,13 @@ function stopRecording(): void {
  */
 export function getRecordingState(): boolean {
   return isRecording;
+}
+
+/**
+ * Reset recording state (called when recording ends in renderer)
+ */
+export function resetRecordingState(): void {
+  isRecording = false;
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppSettings, SUPPORTED_LANGUAGES } from '../../../shared/types';
 import { getAudioDevices } from '../hooks/useAudioRecorder';
 import { validateApiKey, testApiKey } from '../services/whisper';
@@ -15,17 +15,68 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
   const [keyTestResult, setKeyTestResult] = useState<'success' | 'error' | null>(null);
   const [recordingHotkey, setRecordingHotkey] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const hotkeyInputRef = useRef<HTMLInputElement>(null);
 
   // Load audio devices on mount
   useEffect(() => {
     loadAudioDevices();
   }, []);
 
+  // Update local settings when props change
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
   // Track changes
   useEffect(() => {
     const changed = JSON.stringify(localSettings) !== JSON.stringify(settings);
     setHasChanges(changed);
   }, [localSettings, settings]);
+
+  // Handle global keydown for hotkey recording
+  useEffect(() => {
+    if (!recordingHotkey) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const parts: string[] = [];
+      if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+      if (e.altKey) parts.push('Alt');
+      if (e.shiftKey) parts.push('Shift');
+
+      // Get the actual key (not modifier)
+      const key = e.key;
+      const code = e.code;
+
+      // Skip if only modifier is pressed
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) {
+        return;
+      }
+
+      // Map special keys
+      let keyName = key;
+      if (key === ' ') keyName = 'Space';
+      else if (code.startsWith('Key')) keyName = code.replace('Key', '');
+      else if (code.startsWith('Digit')) keyName = code.replace('Digit', '');
+      else if (code.startsWith('Numpad')) keyName = code;
+      else if (key.length === 1) keyName = key.toUpperCase();
+      else keyName = key.charAt(0).toUpperCase() + key.slice(1);
+
+      parts.push(keyName);
+
+      const hotkey = parts.join('+');
+      handleChange('hotkey', hotkey);
+      setRecordingHotkey(false);
+      hotkeyInputRef.current?.blur();
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [recordingHotkey]);
 
   const loadAudioDevices = async () => {
     const devices = await getAudioDevices();
@@ -57,28 +108,8 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
     setIsTestingKey(false);
   };
 
-  const handleHotkeyRecord = (e: React.KeyboardEvent) => {
-    if (!recordingHotkey) return;
-
-    e.preventDefault();
-
-    const parts: string[] = [];
-    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
-    if (e.altKey) parts.push('Alt');
-    if (e.shiftKey) parts.push('Shift');
-
-    // Get the key
-    let key = e.key;
-    if (key === ' ') key = 'Space';
-    else if (key === 'Control' || key === 'Alt' || key === 'Shift' || key === 'Meta')
-      return; // Don't add modifier alone
-
-    key = key.charAt(0).toUpperCase() + key.slice(1);
-    parts.push(key);
-
-    const hotkey = parts.join('+');
-    handleChange('hotkey', hotkey);
-    setRecordingHotkey(false);
+  const startHotkeyRecording = () => {
+    setRecordingHotkey(true);
   };
 
   return (
@@ -174,56 +205,30 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
         </label>
         <div className="flex gap-2">
           <input
+            ref={hotkeyInputRef}
             type="text"
-            value={localSettings.hotkey}
-            onKeyDown={handleHotkeyRecord}
-            onFocus={() => setRecordingHotkey(true)}
-            onBlur={() => setRecordingHotkey(false)}
+            value={recordingHotkey ? 'Press keys...' : localSettings.hotkey}
+            onFocus={startHotkeyRecording}
             readOnly
-            placeholder="Click and press keys..."
-            className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+            placeholder="Click to set hotkey..."
+            className={`flex-1 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
               recordingHotkey
-                ? 'border-primary-500 bg-primary-50'
-                : 'border-gray-300'
+                ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500'
+                : 'border-gray-300 hover:border-gray-400'
             }`}
           />
+          {recordingHotkey && (
+            <button
+              onClick={() => setRecordingHotkey(false)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          )}
         </div>
         <p className="text-xs text-gray-500">
-          Click the field and press your desired key combination
+          Click the field, then press your desired key combination (e.g., Ctrl+Shift+Space)
         </p>
-      </div>
-
-      {/* Hotkey Mode */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Hotkey Mode
-        </label>
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="hotkeyMode"
-              value="toggle"
-              checked={localSettings.hotkeyMode === 'toggle'}
-              onChange={() => handleChange('hotkeyMode', 'toggle')}
-              className="text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm text-gray-700">
-              Toggle (press to start/stop)
-            </span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="hotkeyMode"
-              value="push-to-talk"
-              checked={localSettings.hotkeyMode === 'push-to-talk'}
-              onChange={() => handleChange('hotkeyMode', 'push-to-talk')}
-              className="text-primary-600 focus:ring-primary-500"
-            />
-            <span className="text-sm text-gray-700">Push-to-talk (hold)</span>
-          </label>
-        </div>
       </div>
 
       {/* Insert Mode */}
@@ -231,7 +236,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
         <label className="block text-sm font-medium text-gray-700">
           Text Insertion Mode
         </label>
-        <div className="flex gap-4">
+        <div className="space-y-2">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="radio"
@@ -241,7 +246,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               onChange={() => handleChange('insertMode', 'type')}
               className="text-primary-600 focus:ring-primary-500"
             />
-            <span className="text-sm text-gray-700">Type text directly</span>
+            <span className="text-sm text-gray-700">Type text directly (auto-paste)</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -253,7 +258,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               className="text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm text-gray-700">
-              Copy to clipboard + paste
+              Copy to clipboard only (you paste with Ctrl+V)
             </span>
           </label>
         </div>

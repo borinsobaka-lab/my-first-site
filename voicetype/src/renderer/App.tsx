@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppSettings, RecordingState, DEFAULT_SETTINGS } from '../../shared/types';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { transcribe } from './services/whisper';
@@ -8,15 +8,32 @@ import StatusIndicator from './components/StatusIndicator';
 import RecordingOverlay from './components/RecordingOverlay';
 import About from './components/About';
 
+interface HistoryItem {
+  id: number;
+  text: string;
+  timestamp: Date;
+}
+
 const App: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [state, setState] = useState<RecordingState>('idle');
-  const [lastTranscription, setLastTranscription] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [activeTab, setActiveTab] = useState<'home' | 'settings'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder();
+  const settingsRef = useRef(settings);
+  const isRecordingRef = useRef(false);
+
+  // Keep refs updated
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
 
   // Load settings on mount
   useEffect(() => {
@@ -47,6 +64,11 @@ const App: React.FC = () => {
     window.electronAPI.updateTrayState(state);
   }, [state]);
 
+  // Sync recording state to main process
+  useEffect(() => {
+    window.electronAPI.syncRecordingState(isRecording);
+  }, [isRecording]);
+
   const loadSettings = async () => {
     try {
       const loadedSettings = await window.electronAPI.getSettings();
@@ -66,22 +88,23 @@ const App: React.FC = () => {
   };
 
   const handleStartRecording = useCallback(async () => {
-    if (isRecording || state === 'processing') return;
+    if (isRecordingRef.current) return;
 
     setError(null);
     setState('recording');
 
     try {
-      await startRecording(settings.selectedMicrophone || undefined);
+      await startRecording(settingsRef.current.selectedMicrophone || undefined);
     } catch (err) {
       console.error('Failed to start recording:', err);
       setError('Failed to start recording');
       setState('error');
+      window.electronAPI.syncRecordingState(false);
     }
-  }, [isRecording, state, settings.selectedMicrophone, startRecording]);
+  }, [startRecording]);
 
   const handleStopRecording = useCallback(async () => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current) return;
 
     setState('processing');
 
@@ -91,41 +114,51 @@ const App: React.FC = () => {
       if (!audioBlob || audioBlob.size === 0) {
         setError('No audio recorded');
         setState('error');
+        window.electronAPI.syncRecordingState(false);
         return;
       }
 
       // Check for API key
-      if (!settings.apiKey) {
+      if (!settingsRef.current.apiKey) {
         setError('Please configure your OpenAI API key in settings');
         setState('error');
+        window.electronAPI.syncRecordingState(false);
         return;
       }
 
       // Transcribe audio
-      let text = await transcribe(audioBlob, settings.apiKey, {
-        language: settings.language,
+      let text = await transcribe(audioBlob, settingsRef.current.apiKey, {
+        language: settingsRef.current.language,
       });
 
       // Post-process if enabled
-      if (settings.postProcessing) {
+      if (settingsRef.current.postProcessing) {
         text = postProcessText(text);
       }
 
-      setLastTranscription(text);
+      // Add to history
+      const historyItem: HistoryItem = {
+        id: Date.now(),
+        text,
+        timestamp: new Date(),
+      };
+      setHistory(prev => [historyItem, ...prev].slice(0, 50)); // Keep last 50
 
       // Insert text into active field
       await window.electronAPI.insertText(text);
       window.electronAPI.sendTranscriptionResult(text);
 
       setState('idle');
+      window.electronAPI.syncRecordingState(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Transcription failed';
       console.error('Transcription error:', err);
       setError(errorMessage);
       window.electronAPI.sendTranscriptionError(errorMessage);
       setState('error');
+      window.electronAPI.syncRecordingState(false);
     }
-  }, [isRecording, stopRecording, settings]);
+  }, [stopRecording]);
 
   const handleCancel = useCallback(async () => {
     if (isRecording) {
@@ -133,6 +166,7 @@ const App: React.FC = () => {
     }
     setState('idle');
     setError(null);
+    window.electronAPI.syncRecordingState(false);
   }, [isRecording, stopRecording]);
 
   const handleManualRecord = async () => {
@@ -141,6 +175,18 @@ const App: React.FC = () => {
     } else if (state === 'idle') {
       await handleStartRecording();
     }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const deleteHistoryItem = (id: number) => {
+    setHistory(prev => prev.filter(item => item.id !== id));
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
   };
 
   return (
@@ -177,6 +223,16 @@ const App: React.FC = () => {
             Home
           </button>
           <button
+            onClick={() => setActiveTab('history')}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'history'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            History {history.length > 0 && `(${history.length})`}
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'settings'
@@ -191,12 +247,12 @@ const App: React.FC = () => {
 
       {/* Content */}
       <main className="p-4">
-        {activeTab === 'home' ? (
+        {activeTab === 'home' && (
           <div className="space-y-6">
             {/* Quick status card */}
             <div className="bg-white rounded-xl p-6 shadow-sm border">
               <div className="text-center">
-                <div className="mb-4">
+                <div className="mb-4 flex justify-center">
                   <button
                     onClick={handleManualRecord}
                     disabled={state === 'processing'}
@@ -232,7 +288,7 @@ const App: React.FC = () => {
                   {state === 'idle'
                     ? `Press ${settings.hotkey} or click the button`
                     : state === 'recording'
-                    ? 'Speak now...'
+                    ? 'Speak now... Press hotkey again to stop'
                     : state === 'processing'
                     ? 'Transcribing your speech'
                     : error || 'Something went wrong'}
@@ -241,12 +297,20 @@ const App: React.FC = () => {
             </div>
 
             {/* Last transcription */}
-            {lastTranscription && (
+            {history.length > 0 && (
               <div className="bg-white rounded-xl p-6 shadow-sm border">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">
-                  Last Transcription
-                </h3>
-                <p className="text-gray-800">{lastTranscription}</p>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-gray-500">
+                    Last Transcription
+                  </h3>
+                  <button
+                    onClick={() => copyToClipboard(history[0].text)}
+                    className="text-xs text-primary-600 hover:text-primary-700"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-gray-800">{history[0].text}</p>
               </div>
             )}
 
@@ -288,17 +352,80 @@ const App: React.FC = () => {
               </h3>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>
-                  • Press <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd> to start/stop recording
+                  Press <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd> to start/stop recording
                 </li>
-                <li>• The app works in the background - just focus on any text field</li>
-                <li>• Transcribed text is automatically inserted at your cursor</li>
+                <li>The app works in the background - just focus on any text field</li>
+                {settings.insertMode === 'clipboard' ? (
+                  <li>Text is copied to clipboard - paste with Ctrl+V</li>
+                ) : (
+                  <li>Text is automatically typed at your cursor</li>
+                )}
                 {settings.postProcessing && (
-                  <li>• Say "period", "comma", "new line" for punctuation</li>
+                  <li>Say "period", "comma", "new line" for punctuation</li>
                 )}
               </ul>
             </div>
           </div>
-        ) : (
+        )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">History</h2>
+              {history.length > 0 && (
+                <button
+                  onClick={clearHistory}
+                  className="text-sm text-red-600 hover:text-red-700"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {history.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 shadow-sm border text-center">
+                <p className="text-gray-500">No transcriptions yet</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Your transcription history will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history.map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white rounded-xl p-4 shadow-sm border"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <p className="text-gray-800 flex-1">{item.text}</p>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => copyToClipboard(item.text)}
+                          className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+                          title="Copy to clipboard"
+                        >
+                          Copy
+                        </button>
+                        <button
+                          onClick={() => deleteHistoryItem(item.id)}
+                          className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {item.timestamp.toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
           <Settings settings={settings} onSave={handleSaveSettings} />
         )}
       </main>

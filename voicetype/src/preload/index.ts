@@ -27,6 +27,11 @@ const electronAPI = {
     ipcRenderer.send(IPC_CHANNELS.TRANSCRIPTION_ERROR, { error });
   },
 
+  // Sync recording state to main process
+  syncRecordingState: (isRecording: boolean): void => {
+    ipcRenderer.send('recording:state-sync', isRecording);
+  },
+
   // Tray updates
   updateTrayState: (state: RecordingState): void => {
     ipcRenderer.send(IPC_CHANNELS.TRAY_UPDATE_STATE, state);

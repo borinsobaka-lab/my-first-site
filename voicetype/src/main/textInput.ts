@@ -1,9 +1,5 @@
 import { clipboard } from 'electron';
 
-// Note: @nut-tree/nut-js requires native compilation and may need
-// additional setup on different platforms. We'll use a dynamic import
-// with fallback to clipboard mode.
-
 type InsertMode = 'type' | 'clipboard';
 
 let nutjsAvailable = false;
@@ -32,14 +28,27 @@ loadNutJs();
 /**
  * Insert text into the currently active text field
  * @param text - The text to insert
- * @param mode - 'type' to simulate keyboard typing, 'clipboard' to paste
+ * @param mode - 'type' to simulate keyboard typing, 'clipboard' to copy only
  */
 export async function insertText(text: string, mode: InsertMode): Promise<void> {
-  if (mode === 'type' && nutjsAvailable && keyboard) {
+  if (mode === 'clipboard') {
+    // Clipboard mode: just copy text, user pastes manually
+    await copyToClipboard(text);
+  } else if (nutjsAvailable && keyboard) {
+    // Type mode with nut-js available
     await insertWithTyping(text);
   } else {
-    await insertWithClipboard(text);
+    // Fallback: copy and try to paste
+    await copyAndPaste(text);
   }
+}
+
+/**
+ * Simply copy text to clipboard (for clipboard mode)
+ */
+async function copyToClipboard(text: string): Promise<void> {
+  clipboard.writeText(text);
+  console.log('Text copied to clipboard:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
 }
 
 /**
@@ -47,50 +56,44 @@ export async function insertText(text: string, mode: InsertMode): Promise<void> 
  */
 async function insertWithTyping(text: string): Promise<void> {
   try {
-    // Small delay to ensure focus is on target application
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Delay to ensure focus is on target application
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-    // Type the text character by character
+    // Type the text
     await keyboard.type(text);
+    console.log('Text typed via nut-js');
   } catch (error) {
     console.error('Error typing text with nut-js:', error);
-    // Fallback to clipboard method
-    await insertWithClipboard(text);
+    // Fallback to copy and paste
+    await copyAndPaste(text);
   }
 }
 
 /**
- * Insert text using clipboard and paste simulation
+ * Copy text to clipboard and simulate paste
  */
-async function insertWithClipboard(text: string): Promise<void> {
-  // Save current clipboard content
-  const previousClipboard = clipboard.readText();
+async function copyAndPaste(text: string): Promise<void> {
+  // Copy text to clipboard
+  clipboard.writeText(text);
 
-  try {
-    // Write new text to clipboard
-    clipboard.writeText(text);
+  // Small delay to ensure clipboard is updated
+  await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Small delay to ensure clipboard is updated
-    await new Promise(resolve => setTimeout(resolve, 50));
-
-    // Simulate Ctrl+V (or Cmd+V on macOS)
-    if (nutjsAvailable && keyboard && Key) {
+  // Try to simulate Ctrl+V if nut-js is available
+  if (nutjsAvailable && keyboard && Key) {
+    try {
       const isMac = process.platform === 'darwin';
       const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
 
       await keyboard.pressKey(modifierKey, Key.V);
       await keyboard.releaseKey(modifierKey, Key.V);
-    } else {
-      // If nut-js is not available, just leave text in clipboard
-      console.log('Text copied to clipboard. Please paste manually (Ctrl+V / Cmd+V)');
+      console.log('Text pasted via nut-js');
+    } catch (error) {
+      console.error('Error pasting with nut-js:', error);
+      console.log('Text is in clipboard. Please paste manually (Ctrl+V)');
     }
-  } finally {
-    // Restore previous clipboard content after a delay
-    setTimeout(() => {
-      if (previousClipboard) {
-        clipboard.writeText(previousClipboard);
-      }
-    }, 500);
+  } else {
+    console.log('Text copied to clipboard. Please paste manually (Ctrl+V)');
   }
 }
 

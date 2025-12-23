@@ -15,6 +15,9 @@ interface ElectronAPI {
   sendTranscriptionResult: (text: string) => void;
   sendTranscriptionError: (error: string) => void;
 
+  // Sync recording state to main process
+  syncRecordingState: (isRecording: boolean) => void;
+
   // Tray updates
   updateTrayState: (state: RecordingState) => void;
 
