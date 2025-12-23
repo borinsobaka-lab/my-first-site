@@ -4,7 +4,11 @@ import settingsManager from './settings';
 import { insertText } from './textInput';
 import { updateHotkey } from './shortcuts';
 
-export function setupIPC(_mainWindow: BrowserWindow): void {
+let mainWindowRef: BrowserWindow | null = null;
+
+export function setupIPC(mainWindow: BrowserWindow): void {
+  mainWindowRef = mainWindow;
+
   // Handle settings get request
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
     return settingsManager.getAll();
@@ -27,7 +31,29 @@ export function setupIPC(_mainWindow: BrowserWindow): void {
   // Handle text insertion
   ipcMain.handle(IPC_CHANNELS.TEXT_INSERT, async (_event, data: { text: string }) => {
     const insertMode = settingsManager.get('insertMode');
-    await insertText(data.text, insertMode);
+
+    // For auto-paste mode, we need to blur/hide VoiceType window first
+    // so that focus returns to the previous window
+    if (insertMode === 'type' && mainWindowRef) {
+      // Hide the window temporarily to return focus to previous app
+      const wasVisible = mainWindowRef.isVisible();
+      if (wasVisible) {
+        mainWindowRef.hide();
+        // Wait for OS to switch focus back to previous window
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      await insertText(data.text, insertMode);
+
+      // Show window again after paste (optional - user might not want this)
+      // For now, keep it hidden - user can access via tray
+      // if (wasVisible) {
+      //   mainWindowRef.show();
+      // }
+    } else {
+      await insertText(data.text, insertMode);
+    }
+
     return { success: true };
   });
 

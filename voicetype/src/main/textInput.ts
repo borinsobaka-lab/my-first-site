@@ -74,9 +74,9 @@ async function copyAndPaste(text: string): Promise<void> {
   clipboard.writeText(text);
   console.log('Text copied to clipboard for pasting');
 
-  // Longer delay to ensure the previous window regains focus
-  // When VoiceType processes the audio, the user's window might lose focus momentarily
-  await new Promise(resolve => setTimeout(resolve, 300));
+  // Wait for the target window to have focus
+  // The main window should already be hidden by ipc.ts at this point
+  await new Promise(resolve => setTimeout(resolve, 200));
 
   // Try to simulate Ctrl+V if nut-js is available
   if (nutjsAvailable && keyboard && Key) {
@@ -84,17 +84,24 @@ async function copyAndPaste(text: string): Promise<void> {
       const isMac = process.platform === 'darwin';
       const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
 
-      console.log('Attempting to paste with nut-js...');
+      console.log('Simulating Ctrl+V paste...');
 
-      // Small delay before key press
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Press modifier key
+      await keyboard.pressKey(modifierKey);
+      await new Promise(resolve => setTimeout(resolve, 30));
 
-      // Press and release the paste shortcut
-      await keyboard.pressKey(modifierKey, Key.V);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await keyboard.releaseKey(modifierKey, Key.V);
+      // Press V
+      await keyboard.pressKey(Key.V);
+      await new Promise(resolve => setTimeout(resolve, 30));
 
-      console.log('Text pasted via nut-js (Ctrl+V)');
+      // Release V
+      await keyboard.releaseKey(Key.V);
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      // Release modifier
+      await keyboard.releaseKey(modifierKey);
+
+      console.log('Paste command sent successfully');
     } catch (error) {
       console.error('Error pasting with nut-js:', error);
       console.log('Text is in clipboard. Please paste manually (Ctrl+V)');
