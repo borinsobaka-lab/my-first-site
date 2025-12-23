@@ -3,7 +3,7 @@ import { IPC_CHANNELS, AppSettings, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
 import { insertText } from './textInput';
 
-export function setupIPC(mainWindow: BrowserWindow): void {
+export function setupIPC(_mainWindow: BrowserWindow): void {
   // Handle settings get request
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
     return settingsManager.getAll();

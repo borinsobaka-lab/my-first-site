@@ -6,10 +6,10 @@ let nutjsAvailable = false;
 let keyboard: any = null;
 let Key: any = null;
 
-// Try to load nut-js
+// Try to load nut-js fork
 async function loadNutJs(): Promise<boolean> {
   try {
-    const nutjs = await import('@nut-tree/nut-js');
+    const nutjs = await import('@nut-tree-fork/nut-js');
     keyboard = nutjs.keyboard;
     Key = nutjs.Key;
     nutjsAvailable = true;

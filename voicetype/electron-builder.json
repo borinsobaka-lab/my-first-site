@@ -10,12 +10,6 @@
     "dist/**/*",
     "assets/**/*"
   ],
-  "extraResources": [
-    {
-      "from": "assets",
-      "to": "assets"
-    }
-  ],
   "win": {
     "target": [
       {
@@ -27,16 +21,13 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "assets/icon.png",
+    "signAndEditExecutable": false,
     "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "allowElevation": true,
-    "installerIcon": "assets/icon.ico",
-    "uninstallerIcon": "assets/icon.ico",
-    "installerHeaderIcon": "assets/icon.ico",
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "VoiceType"
@@ -52,12 +43,7 @@
         "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "assets/icon.icns",
-    "category": "public.app-category.productivity",
-    "hardenedRuntime": true,
-    "gatekeeperAssess": false,
-    "entitlements": "build/entitlements.mac.plist",
-    "entitlementsInherit": "build/entitlements.mac.plist"
+    "category": "public.app-category.productivity"
   },
   "dmg": {
     "contents": [
@@ -84,7 +70,6 @@
         "arch": ["x64"]
       }
     ],
-    "icon": "assets/icon.png",
     "category": "Utility",
     "maintainer": "VoiceType Team",
     "synopsis": "Speech to Text Desktop App",

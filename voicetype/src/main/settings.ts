@@ -26,7 +26,10 @@ const schema = {
     default: DEFAULT_SETTINGS.insertMode,
   },
   selectedMicrophone: {
-    type: ['string', 'null'] as const,
+    anyOf: [
+      { type: 'string' as const },
+      { type: 'null' as const }
+    ],
     default: DEFAULT_SETTINGS.selectedMicrophone,
   },
   autoStart: {
@@ -44,7 +47,7 @@ class SettingsManager {
 
   constructor() {
     this.store = new Store<AppSettings>({
-      schema,
+      schema: schema as any,
       defaults: DEFAULT_SETTINGS,
     });
   }

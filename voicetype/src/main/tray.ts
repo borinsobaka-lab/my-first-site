@@ -1,5 +1,4 @@
 import { Tray, Menu, nativeImage, BrowserWindow, app } from 'electron';
-import * as path from 'path';
 import { RecordingState } from '../../shared/types';
 
 let tray: Tray | null = null;
