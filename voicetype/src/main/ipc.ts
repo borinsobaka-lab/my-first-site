@@ -31,6 +31,9 @@ export function setupIPC(mainWindow: BrowserWindow): void {
   // Handle text insertion
   ipcMain.handle(IPC_CHANNELS.TEXT_INSERT, async (_event, data: { text: string }) => {
     const insertMode = settingsManager.get('insertMode');
+    const textLength = data.text?.length || 0;
+
+    console.log(`Inserting text: ${textLength} characters, mode: ${insertMode}`);
 
     // For auto-paste mode, we need to blur/hide VoiceType window first
     // so that focus returns to the previous window
@@ -38,12 +41,14 @@ export function setupIPC(mainWindow: BrowserWindow): void {
       // Hide the window temporarily to return focus to previous app
       const wasVisible = mainWindowRef.isVisible();
       if (wasVisible) {
+        console.log('Hiding VoiceType window to return focus to target app');
         mainWindowRef.hide();
         // Wait for OS to switch focus back to previous window
         await new Promise(resolve => setTimeout(resolve, 150));
       }
 
       await insertText(data.text, insertMode);
+      console.log('Text insertion completed');
 
       // Show window again after paste (optional - user might not want this)
       // For now, keep it hidden - user can access via tray
@@ -52,6 +57,7 @@ export function setupIPC(mainWindow: BrowserWindow): void {
       // }
     } else {
       await insertText(data.text, insertMode);
+      console.log('Text copied to clipboard (clipboard mode)');
     }
 
     return { success: true };

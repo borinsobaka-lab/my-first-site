@@ -95,7 +95,9 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         setAudioBlob(blob);
         setIsRecording(false);
 
-        console.log('Recording stopped, blob size:', blob.size);
+        const sizeKB = (blob.size / 1024).toFixed(1);
+        const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
+        console.log(`Recording stopped: ${chunksRef.current.length} chunks, ${sizeKB} KB (${sizeMB} MB)`);
         resolve(blob);
       };
 

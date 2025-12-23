@@ -4,6 +4,7 @@ const WHISPER_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
 /**
  * Transcribe audio using OpenAI Whisper API
+ * Supports audio files up to 25MB (about 25 minutes at typical quality)
  */
 export async function transcribe(
   audioBlob: Blob,
@@ -16,6 +17,15 @@ export async function transcribe(
 
   if (!audioBlob || audioBlob.size === 0) {
     throw new Error('Audio blob is empty');
+  }
+
+  // Log audio info for debugging
+  const fileSizeMB = (audioBlob.size / (1024 * 1024)).toFixed(2);
+  console.log(`Transcribing audio: ${fileSizeMB} MB, type: ${audioBlob.type}`);
+
+  // Check file size limit (Whisper API limit is 25MB)
+  if (audioBlob.size > 25 * 1024 * 1024) {
+    throw new Error('Аудиофайл слишком большой (макс. 25 МБ)');
   }
 
   // Prepare form data
@@ -40,7 +50,10 @@ export async function transcribe(
     formData.append('prompt', options.prompt);
   }
 
-  // Make API request
+  console.log('Sending request to Whisper API...');
+  const startTime = Date.now();
+
+  // Make API request (no timeout - long audio may take time to process)
   const response = await fetch(WHISPER_API_URL, {
     method: 'POST',
     headers: {
@@ -48,6 +61,9 @@ export async function transcribe(
     },
     body: formData,
   });
+
+  const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`Whisper API responded in ${processingTime}s`);
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -58,6 +74,7 @@ export async function transcribe(
   }
 
   const data: WhisperResponse = await response.json();
+  console.log(`Transcribed ${data.text.length} characters`);
   return data.text;
 }
 
