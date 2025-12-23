@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.2",
-    "electron-store": "^8.1.0"
+    "electron-store": "^8.1.0",
+    "koffi": "^2.8.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
@@ -49,7 +50,12 @@
     },
     "files": [
       "dist/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "node_modules/koffi/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/koffi/**/*"
     ],
     "win": {
       "target": [

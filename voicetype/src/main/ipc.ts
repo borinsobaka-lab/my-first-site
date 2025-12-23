@@ -42,9 +42,18 @@ export function setupIPC(mainWindow: BrowserWindow): void {
       const wasVisible = mainWindowRef.isVisible();
       if (wasVisible) {
         console.log('Hiding VoiceType window to return focus to target app');
+
+        // First blur to release focus
+        mainWindowRef.blur();
+
+        // Then hide the window
         mainWindowRef.hide();
+
         // Wait for OS to switch focus back to previous window
-        await new Promise(resolve => setTimeout(resolve, 150));
+        // Longer delay to ensure focus is properly restored
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        console.log('Window hidden, focus should be on previous app');
       }
 
       await insertText(data.text, insertMode);

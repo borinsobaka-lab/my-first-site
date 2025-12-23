@@ -1,8 +1,84 @@
 import { clipboard } from 'electron';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 const execAsync = promisify(exec);
+
+// Windows API via koffi for direct keyboard simulation
+let koffiLoaded = false;
+let user32: any = null;
+let SendInput: any = null;
+let koffiLoading: Promise<boolean> | null = null;
+
+// Windows API constants
+const INPUT_KEYBOARD = 1;
+const KEYEVENTF_KEYUP = 0x0002;
+const VK_CONTROL = 0x11;
+const VK_V = 0x56;
+
+/**
+ * Load koffi and setup Windows API bindings
+ */
+async function loadKoffi(): Promise<boolean> {
+  if (koffiLoaded) return true;
+  if (process.platform !== 'win32') return false;
+  if (koffiLoading) return koffiLoading;
+
+  koffiLoading = (async () => {
+    try {
+      const koffi = await import('koffi');
+
+      // Define the INPUT structure for SendInput
+      const KEYBDINPUT = koffi.struct('KEYBDINPUT', {
+        wVk: 'uint16',
+        wScan: 'uint16',
+        dwFlags: 'uint32',
+        time: 'uint32',
+        dwExtraInfo: 'uintptr',
+      });
+
+      const MOUSEINPUT = koffi.struct('MOUSEINPUT', {
+        dx: 'int32',
+        dy: 'int32',
+        mouseData: 'uint32',
+        dwFlags: 'uint32',
+        time: 'uint32',
+        dwExtraInfo: 'uintptr',
+      });
+
+      const HARDWAREINPUT = koffi.struct('HARDWAREINPUT', {
+        uMsg: 'uint32',
+        wParamL: 'uint16',
+        wParamH: 'uint16',
+      });
+
+      // INPUT structure with union
+      const INPUT = koffi.struct('INPUT', {
+        type: 'uint32',
+        ki: KEYBDINPUT, // We'll use keyboard input
+      });
+
+      // Load user32.dll
+      user32 = koffi.load('user32.dll');
+
+      // Bind SendInput function
+      SendInput = user32.func('uint32 SendInput(uint32 cInputs, INPUT *pInputs, int cbSize)');
+
+      koffiLoaded = true;
+      console.log('koffi loaded successfully for Windows API');
+      return true;
+    } catch (error) {
+      console.warn('koffi not available:', error);
+      koffiLoaded = false;
+      return false;
+    }
+  })();
+
+  return koffiLoading;
+}
 
 type InsertMode = 'type' | 'clipboard';
 
@@ -69,15 +145,40 @@ async function copyAndPaste(text: string): Promise<void> {
   console.log('Text copied to clipboard for auto-paste');
 
   // Wait for the target window to have focus (window should already be hidden by ipc.ts)
-  await delay(200);
+  await delay(100);
 
   // Try platform-specific paste methods
   const platform = process.platform;
   let pasted = false;
 
   if (platform === 'win32') {
-    // On Windows, try PowerShell method first (most reliable)
-    pasted = await pasteWithPowerShell();
+    // On Windows, try multiple methods in order of reliability
+
+    // Method 1: Windows API via koffi (most direct, no subprocess)
+    await loadKoffi();
+    if (koffiLoaded) {
+      pasted = await pasteWithWindowsAPI();
+    }
+
+    // Method 2: VBScript via mshta (fast, inline)
+    if (!pasted) {
+      pasted = await pasteWithMshta();
+    }
+
+    // Method 3: VBScript via cscript (temp file)
+    if (!pasted) {
+      pasted = await pasteWithVBScript();
+    }
+
+    // Method 4: PowerShell with WScript.Shell COM
+    if (!pasted) {
+      pasted = await pasteWithPowerShellWScript();
+    }
+
+    // Method 5: Original PowerShell method
+    if (!pasted) {
+      pasted = await pasteWithPowerShell();
+    }
   }
 
   if (!pasted && platform === 'darwin') {
@@ -95,23 +196,160 @@ async function copyAndPaste(text: string): Promise<void> {
 
   if (!pasted) {
     console.log('All paste methods failed. Text is in clipboard - paste manually with Ctrl+V');
+  } else {
+    console.log('Text pasted successfully');
   }
 }
 
 /**
- * Paste using PowerShell (Windows)
+ * Paste using Windows API directly via koffi (Windows)
+ * This is the most reliable method as it doesn't spawn any subprocess
+ */
+async function pasteWithWindowsAPI(): Promise<boolean> {
+  if (!koffiLoaded || !SendInput) {
+    return false;
+  }
+
+  try {
+    console.log('Attempting paste with Windows API (SendInput)...');
+
+    // Create INPUT structures for Ctrl+V keystrokes
+    // We need: Ctrl down, V down, V up, Ctrl up
+    const inputs = [
+      // Ctrl down
+      { type: INPUT_KEYBOARD, ki: { wVk: VK_CONTROL, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } },
+      // V down
+      { type: INPUT_KEYBOARD, ki: { wVk: VK_V, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } },
+      // V up
+      { type: INPUT_KEYBOARD, ki: { wVk: VK_V, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } },
+      // Ctrl up
+      { type: INPUT_KEYBOARD, ki: { wVk: VK_CONTROL, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } },
+    ];
+
+    // Send all inputs at once
+    const result = SendInput(4, inputs, 40); // 40 = sizeof(INPUT) on x64
+
+    if (result === 4) {
+      console.log('Paste with Windows API successful');
+      return true;
+    } else {
+      console.error('SendInput returned:', result);
+      return false;
+    }
+  } catch (error) {
+    console.error('Windows API paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Paste using mshta.exe with inline VBScript (Windows)
+ * This is the fastest method as it doesn't require starting a shell
+ */
+async function pasteWithMshta(): Promise<boolean> {
+  try {
+    console.log('Attempting paste with mshta (VBScript inline)...');
+
+    // mshta can execute VBScript inline - this is very fast
+    // The VBScript creates a WScript.Shell object and sends Ctrl+V
+    const vbscript = 'CreateObject("WScript.Shell").SendKeys "^v"';
+    const command = `mshta vbscript:Execute("${vbscript}:close")`;
+
+    await execAsync(command, {
+      windowsHide: true,
+      timeout: 3000,
+    });
+
+    console.log('Paste with mshta successful');
+    return true;
+  } catch (error) {
+    console.error('mshta paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Paste using VBScript via cscript (Windows)
+ * Creates a temp VBS file and executes it
+ */
+async function pasteWithVBScript(): Promise<boolean> {
+  const tempFile = path.join(os.tmpdir(), `voicetype_paste_${Date.now()}.vbs`);
+
+  try {
+    console.log('Attempting paste with VBScript file...');
+
+    // Create VBScript that sends Ctrl+V
+    const vbscript = `
+Set WshShell = CreateObject("WScript.Shell")
+WScript.Sleep 50
+WshShell.SendKeys "^v"
+`;
+
+    // Write to temp file
+    fs.writeFileSync(tempFile, vbscript, 'utf8');
+
+    // Execute with cscript (console script host, no GUI)
+    await execAsync(`cscript //nologo //B "${tempFile}"`, {
+      windowsHide: true,
+      timeout: 3000,
+    });
+
+    console.log('Paste with VBScript successful');
+    return true;
+  } catch (error) {
+    console.error('VBScript paste failed:', error);
+    return false;
+  } finally {
+    // Clean up temp file
+    try {
+      if (fs.existsSync(tempFile)) {
+        fs.unlinkSync(tempFile);
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+/**
+ * Paste using PowerShell with WScript.Shell COM object (Windows)
+ * Alternative to System.Windows.Forms.SendKeys
+ */
+async function pasteWithPowerShellWScript(): Promise<boolean> {
+  try {
+    console.log('Attempting paste with PowerShell WScript.Shell...');
+
+    // Use WScript.Shell COM object instead of Windows Forms
+    const script = `$wsh = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 50; $wsh.SendKeys('^v')`;
+
+    await execAsync(`powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${script}"`, {
+      windowsHide: true,
+      timeout: 5000,
+    });
+
+    console.log('Paste with PowerShell WScript.Shell successful');
+    return true;
+  } catch (error) {
+    console.error('PowerShell WScript.Shell paste failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Paste using PowerShell with System.Windows.Forms (Windows)
  * Uses .NET SendKeys which is very reliable
  */
 async function pasteWithPowerShell(): Promise<boolean> {
   try {
-    console.log('Attempting paste with PowerShell...');
+    console.log('Attempting paste with PowerShell SendKeys...');
 
     // Use PowerShell to send Ctrl+V via Windows Forms SendKeys
     // ^v means Ctrl+V in SendKeys notation
-    const script = `Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 100; [System.Windows.Forms.SendKeys]::SendWait('^v')`;
+    const script = `Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('^v')`;
 
-    await execAsync(`powershell -NoProfile -NonInteractive -Command "${script}"`, {
+    await execAsync(`powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${script}"`, {
       windowsHide: true,
+      timeout: 5000,
     });
 
     console.log('Paste with PowerShell successful');
