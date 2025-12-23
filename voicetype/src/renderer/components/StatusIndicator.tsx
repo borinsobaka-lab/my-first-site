@@ -15,35 +15,35 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       case 'idle':
         return {
           color: 'bg-idle',
-          text: 'Ready',
+          text: 'Готово',
           icon: '●',
           animation: '',
         };
       case 'recording':
         return {
           color: 'bg-recording',
-          text: 'Recording...',
+          text: 'Запись...',
           icon: '●',
           animation: 'animate-pulse-recording',
         };
       case 'processing':
         return {
           color: 'bg-processing',
-          text: 'Processing...',
+          text: 'Обработка...',
           icon: '◐',
           animation: 'animate-spin-slow',
         };
       case 'error':
         return {
           color: 'bg-gray-500',
-          text: 'Error',
+          text: 'Ошибка',
           icon: '✕',
           animation: '',
         };
       default:
         return {
           color: 'bg-gray-400',
-          text: 'Unknown',
+          text: 'Неизвестно',
           icon: '?',
           animation: '',
         };

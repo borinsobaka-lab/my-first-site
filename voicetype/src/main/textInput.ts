@@ -12,6 +12,12 @@ async function loadNutJs(): Promise<boolean> {
     const nutjs = await import('@nut-tree-fork/nut-js');
     keyboard = nutjs.keyboard;
     Key = nutjs.Key;
+
+    // Configure nut-js for faster typing
+    if (keyboard && keyboard.config) {
+      keyboard.config.autoDelayMs = 0;
+    }
+
     nutjsAvailable = true;
     console.log('nut-js loaded successfully');
     return true;
@@ -34,11 +40,8 @@ export async function insertText(text: string, mode: InsertMode): Promise<void> 
   if (mode === 'clipboard') {
     // Clipboard mode: just copy text, user pastes manually
     await copyToClipboard(text);
-  } else if (nutjsAvailable && keyboard) {
-    // Type mode with nut-js available
-    await insertWithTyping(text);
   } else {
-    // Fallback: copy and try to paste
+    // Type mode: copy to clipboard and simulate Ctrl+V paste
     await copyAndPaste(text);
   }
 }
@@ -52,32 +55,16 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 /**
- * Simulate keyboard typing using nut-js
- */
-async function insertWithTyping(text: string): Promise<void> {
-  try {
-    // Delay to ensure focus is on target application
-    await new Promise(resolve => setTimeout(resolve, 150));
-
-    // Type the text
-    await keyboard.type(text);
-    console.log('Text typed via nut-js');
-  } catch (error) {
-    console.error('Error typing text with nut-js:', error);
-    // Fallback to copy and paste
-    await copyAndPaste(text);
-  }
-}
-
-/**
  * Copy text to clipboard and simulate paste
+ * This is more reliable than direct typing on most systems
  */
 async function copyAndPaste(text: string): Promise<void> {
   // Copy text to clipboard
   clipboard.writeText(text);
+  console.log('Text copied to clipboard for pasting');
 
-  // Small delay to ensure clipboard is updated
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Give time for the window to regain focus
+  await new Promise(resolve => setTimeout(resolve, 200));
 
   // Try to simulate Ctrl+V if nut-js is available
   if (nutjsAvailable && keyboard && Key) {
@@ -85,15 +72,18 @@ async function copyAndPaste(text: string): Promise<void> {
       const isMac = process.platform === 'darwin';
       const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
 
+      // Press and release the paste shortcut
       await keyboard.pressKey(modifierKey, Key.V);
+      await new Promise(resolve => setTimeout(resolve, 50));
       await keyboard.releaseKey(modifierKey, Key.V);
-      console.log('Text pasted via nut-js');
+
+      console.log('Text pasted via nut-js (Ctrl+V)');
     } catch (error) {
       console.error('Error pasting with nut-js:', error);
       console.log('Text is in clipboard. Please paste manually (Ctrl+V)');
     }
   } else {
-    console.log('Text copied to clipboard. Please paste manually (Ctrl+V)');
+    console.log('nut-js not available. Text copied to clipboard - paste manually with Ctrl+V');
   }
 }
 

@@ -3,6 +3,7 @@ import { AppSettings, RecordingState, DEFAULT_SETTINGS } from '../../shared/type
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { transcribe } from './services/whisper';
 import { postProcessText } from './services/postprocess';
+import { playStartSound, playStopSound, playErrorSound } from './services/sounds';
 import Settings from './components/Settings';
 import StatusIndicator from './components/StatusIndicator';
 import RecordingOverlay from './components/RecordingOverlay';
@@ -12,6 +13,22 @@ interface HistoryItem {
   id: number;
   text: string;
   timestamp: Date;
+  durationSeconds: number;
+}
+
+// Format seconds to human-readable string
+function formatTime(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+
+  if (hours > 0) {
+    return `${hours} ч ${minutes} мин ${seconds} сек`;
+  } else if (minutes > 0) {
+    return `${minutes} мин ${seconds} сек`;
+  } else {
+    return `${seconds} сек`;
+  }
 }
 
 const App: React.FC = () => {
@@ -21,6 +38,7 @@ const App: React.FC = () => {
   const [showAbout, setShowAbout] = useState(false);
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder();
   const settingsRef = useRef(settings);
@@ -92,13 +110,22 @@ const App: React.FC = () => {
 
     setError(null);
     setState('recording');
+    setRecordingStartTime(Date.now());
+
+    // Play start sound if enabled
+    if (settingsRef.current.soundEnabled) {
+      playStartSound();
+    }
 
     try {
       await startRecording(settingsRef.current.selectedMicrophone || undefined);
     } catch (err) {
       console.error('Failed to start recording:', err);
-      setError('Failed to start recording');
+      setError('Не удалось начать запись');
       setState('error');
+      if (settingsRef.current.soundEnabled) {
+        playErrorSound();
+      }
       window.electronAPI.syncRecordingState(false);
     }
   }, [startRecording]);
@@ -106,22 +133,38 @@ const App: React.FC = () => {
   const handleStopRecording = useCallback(async () => {
     if (!isRecordingRef.current) return;
 
+    // Calculate recording duration
+    const durationSeconds = recordingStartTime
+      ? Math.round((Date.now() - recordingStartTime) / 1000)
+      : 0;
+
+    // Play stop sound if enabled
+    if (settingsRef.current.soundEnabled) {
+      playStopSound();
+    }
+
     setState('processing');
 
     try {
       const audioBlob = await stopRecording();
 
       if (!audioBlob || audioBlob.size === 0) {
-        setError('No audio recorded');
+        setError('Аудио не записано');
         setState('error');
+        if (settingsRef.current.soundEnabled) {
+          playErrorSound();
+        }
         window.electronAPI.syncRecordingState(false);
         return;
       }
 
       // Check for API key
       if (!settingsRef.current.apiKey) {
-        setError('Please configure your OpenAI API key in settings');
+        setError('Укажите API-ключ OpenAI в настройках');
         setState('error');
+        if (settingsRef.current.soundEnabled) {
+          playErrorSound();
+        }
         window.electronAPI.syncRecordingState(false);
         return;
       }
@@ -141,8 +184,13 @@ const App: React.FC = () => {
         id: Date.now(),
         text,
         timestamp: new Date(),
+        durationSeconds,
       };
       setHistory(prev => [historyItem, ...prev].slice(0, 50)); // Keep last 50
+
+      // Update total recording time
+      const newTotal = settingsRef.current.totalRecordingSeconds + durationSeconds;
+      handleSaveSettings({ totalRecordingSeconds: newTotal });
 
       // Insert text into active field
       await window.electronAPI.insertText(text);
@@ -151,14 +199,17 @@ const App: React.FC = () => {
       setState('idle');
       window.electronAPI.syncRecordingState(false);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Transcription failed';
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка транскрибации';
       console.error('Transcription error:', err);
       setError(errorMessage);
+      if (settingsRef.current.soundEnabled) {
+        playErrorSound();
+      }
       window.electronAPI.sendTranscriptionError(errorMessage);
       setState('error');
       window.electronAPI.syncRecordingState(false);
     }
-  }, [stopRecording]);
+  }, [stopRecording, recordingStartTime]);
 
   const handleCancel = useCallback(async () => {
     if (isRecording) {
@@ -190,11 +241,11 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b px-4 py-3 flex items-center justify-between">
+      <header className="bg-white border-b px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center flex-shrink-0">
             <svg
               className="w-5 h-5 text-white"
               fill="currentColor"
@@ -210,7 +261,7 @@ const App: React.FC = () => {
       </header>
 
       {/* Navigation tabs */}
-      <nav className="bg-white border-b px-4">
+      <nav className="bg-white border-b px-4 flex-shrink-0">
         <div className="flex gap-4">
           <button
             onClick={() => setActiveTab('home')}
@@ -220,7 +271,7 @@ const App: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            Home
+            Главная
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -230,7 +281,7 @@ const App: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            History {history.length > 0 && `(${history.length})`}
+            История {history.length > 0 && `(${history.length})`}
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -240,13 +291,13 @@ const App: React.FC = () => {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            Settings
+            Настройки
           </button>
         </div>
       </nav>
 
       {/* Content */}
-      <main className="p-4">
+      <main className="flex-1 overflow-y-auto p-4">
         {activeTab === 'home' && (
           <div className="space-y-6">
             {/* Quick status card */}
@@ -256,7 +307,7 @@ const App: React.FC = () => {
                   <button
                     onClick={handleManualRecord}
                     disabled={state === 'processing'}
-                    className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
+                    className={`w-24 h-24 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
                       state === 'recording'
                         ? 'bg-recording animate-pulse-recording'
                         : state === 'processing'
@@ -277,21 +328,21 @@ const App: React.FC = () => {
 
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
                   {state === 'idle'
-                    ? 'Ready to Record'
+                    ? 'Готово к записи'
                     : state === 'recording'
-                    ? 'Recording...'
+                    ? 'Идёт запись...'
                     : state === 'processing'
-                    ? 'Processing...'
-                    : 'Error'}
+                    ? 'Обработка...'
+                    : 'Ошибка'}
                 </h2>
                 <p className="text-sm text-gray-500">
                   {state === 'idle'
-                    ? `Press ${settings.hotkey} or click the button`
+                    ? `Нажмите ${settings.hotkey} или кнопку выше`
                     : state === 'recording'
-                    ? 'Speak now... Press hotkey again to stop'
+                    ? 'Говорите... Нажмите хоткей снова для остановки'
                     : state === 'processing'
-                    ? 'Transcribing your speech'
-                    : error || 'Something went wrong'}
+                    ? 'Распознавание речи'
+                    : error || 'Произошла ошибка'}
                 </p>
               </div>
             </div>
@@ -301,13 +352,13 @@ const App: React.FC = () => {
               <div className="bg-white rounded-xl p-6 shadow-sm border">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-sm font-medium text-gray-500">
-                    Last Transcription
+                    Последняя транскрибация
                   </h3>
                   <button
                     onClick={() => copyToClipboard(history[0].text)}
                     className="text-xs text-primary-600 hover:text-primary-700"
                   >
-                    Copy
+                    Копировать
                   </button>
                 </div>
                 <p className="text-gray-800">{history[0].text}</p>
@@ -319,7 +370,7 @@ const App: React.FC = () => {
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                 <div className="flex items-start gap-3">
                   <svg
-                    className="w-5 h-5 text-red-500 mt-0.5"
+                    className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -331,16 +382,16 @@ const App: React.FC = () => {
                       d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <div>
-                    <h3 className="text-sm font-medium text-red-800">Error</h3>
-                    <p className="text-sm text-red-600 mt-1">{error}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-red-800">Ошибка</h3>
+                    <p className="text-sm text-red-600 mt-1 break-words">{error}</p>
                   </div>
                 </div>
                 <button
                   onClick={handleCancel}
                   className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium"
                 >
-                  Dismiss
+                  Закрыть
                 </button>
               </div>
             )}
@@ -348,20 +399,20 @@ const App: React.FC = () => {
             {/* Quick tips */}
             <div className="bg-gray-100 rounded-xl p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Quick Tips
+                Подсказки
               </h3>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>
-                  Press <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd> to start/stop recording
+                  Нажмите <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd> для начала/остановки записи
                 </li>
-                <li>The app works in the background - just focus on any text field</li>
+                <li>Приложение работает в фоне — просто переключитесь на текстовое поле</li>
                 {settings.insertMode === 'clipboard' ? (
-                  <li>Text is copied to clipboard - paste with Ctrl+V</li>
+                  <li>Текст копируется в буфер обмена — вставьте через Ctrl+V</li>
                 ) : (
-                  <li>Text is automatically typed at your cursor</li>
+                  <li>Текст автоматически вставляется в активное поле</li>
                 )}
                 {settings.postProcessing && (
-                  <li>Say "period", "comma", "new line" for punctuation</li>
+                  <li>Произнесите «точка», «запятая», «новая строка» для пунктуации</li>
                 )}
               </ul>
             </div>
@@ -370,23 +421,50 @@ const App: React.FC = () => {
 
         {activeTab === 'history' && (
           <div className="space-y-4">
+            {/* Recording time counter */}
+            <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg
+                    className="w-5 h-5 text-primary-600"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-primary-600 font-medium">Всего записано</p>
+                  <p className="text-lg font-semibold text-primary-800">
+                    {formatTime(settings.totalRecordingSeconds)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-800">History</h2>
+              <h2 className="text-xl font-bold text-gray-800">История</h2>
               {history.length > 0 && (
                 <button
                   onClick={clearHistory}
                   className="text-sm text-red-600 hover:text-red-700"
                 >
-                  Clear all
+                  Очистить всё
                 </button>
               )}
             </div>
 
             {history.length === 0 ? (
               <div className="bg-white rounded-xl p-8 shadow-sm border text-center">
-                <p className="text-gray-500">No transcriptions yet</p>
+                <p className="text-gray-500">Транскрибаций пока нет</p>
                 <p className="text-sm text-gray-400 mt-1">
-                  Your transcription history will appear here
+                  История ваших записей появится здесь
                 </p>
               </div>
             ) : (
@@ -397,27 +475,29 @@ const App: React.FC = () => {
                     className="bg-white rounded-xl p-4 shadow-sm border"
                   >
                     <div className="flex justify-between items-start gap-2">
-                      <p className="text-gray-800 flex-1">{item.text}</p>
+                      <p className="text-gray-800 flex-1 break-words min-w-0">{item.text}</p>
                       <div className="flex gap-2 flex-shrink-0">
                         <button
                           onClick={() => copyToClipboard(item.text)}
                           className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded transition-colors"
-                          title="Copy to clipboard"
+                          title="Копировать"
                         >
-                          Copy
+                          Копировать
                         </button>
                         <button
                           onClick={() => deleteHistoryItem(item.id)}
                           className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Delete"
+                          title="Удалить"
                         >
-                          Delete
+                          Удалить
                         </button>
                       </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">
-                      {item.timestamp.toLocaleString()}
-                    </p>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                      <span>{item.timestamp.toLocaleString('ru-RU')}</span>
+                      <span>•</span>
+                      <span>{item.durationSeconds} сек</span>
+                    </div>
                   </div>
                 ))}
               </div>

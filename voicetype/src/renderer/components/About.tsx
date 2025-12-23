@@ -22,16 +22,16 @@ export const About: React.FC<AboutProps> = ({ onClose }) => {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-800 mb-1">VoiceType</h1>
-          <p className="text-gray-500 mb-4">Version 1.0.0</p>
+          <p className="text-gray-500 mb-4">Версия 1.0.0</p>
 
           <p className="text-gray-600 mb-6">
-            Speech-to-Text desktop application that allows you to dictate text
-            and insert it into any active text field using a global hotkey.
+            Приложение для преобразования речи в текст.
+            Диктуйте текст и вставляйте его в любое текстовое поле с помощью глобальной горячей клавиши.
           </p>
 
           <div className="space-y-2 text-sm text-gray-500 mb-6">
-            <p>Powered by OpenAI Whisper API</p>
-            <p>Built with Electron + React + TypeScript</p>
+            <p>Работает на OpenAI Whisper API</p>
+            <p>Создано с Electron + React + TypeScript</p>
           </div>
 
           <div className="flex gap-4">
@@ -39,7 +39,7 @@ export const About: React.FC<AboutProps> = ({ onClose }) => {
               onClick={onClose}
               className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors"
             >
-              Close
+              Закрыть
             </button>
           </div>
         </div>

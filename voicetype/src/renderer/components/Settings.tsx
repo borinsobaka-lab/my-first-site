@@ -113,13 +113,13 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-h-[calc(100vh-100px)] overflow-y-auto">
-      <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
+    <div className="space-y-6 max-h-[calc(100vh-140px)] overflow-y-auto">
+      <h1 className="text-2xl font-bold text-gray-800">Настройки</h1>
 
       {/* API Key */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          OpenAI API Key
+          API-ключ OpenAI
         </label>
         <div className="flex gap-2">
           <input
@@ -127,14 +127,14 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
             value={localSettings.apiKey}
             onChange={(e) => handleChange('apiKey', e.target.value)}
             placeholder="sk-..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
           <button
             onClick={handleTestApiKey}
             disabled={isTestingKey || !localSettings.apiKey}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50 transition-colors flex-shrink-0"
           >
-            {isTestingKey ? 'Testing...' : 'Test'}
+            {isTestingKey ? 'Проверка...' : 'Проверить'}
           </button>
         </div>
         {keyTestResult && (
@@ -144,8 +144,8 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
             }`}
           >
             {keyTestResult === 'success'
-              ? '✓ API key is valid'
-              : '✕ API key is invalid'}
+              ? '✓ API-ключ действителен'
+              : '✕ API-ключ недействителен'}
           </p>
         )}
       </div>
@@ -153,7 +153,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
       {/* Language */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Recognition Language
+          Язык распознавания
         </label>
         <select
           value={localSettings.language}
@@ -171,7 +171,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
       {/* Microphone */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Microphone
+          Микрофон
         </label>
         <div className="flex gap-2">
           <select
@@ -179,19 +179,19 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
             onChange={(e) =>
               handleChange('selectedMicrophone', e.target.value || null)
             }
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           >
-            <option value="">Default microphone</option>
+            <option value="">Микрофон по умолчанию</option>
             {audioDevices.map((device) => (
               <option key={device.deviceId} value={device.deviceId}>
-                {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                {device.label || `Микрофон ${device.deviceId.slice(0, 8)}`}
               </option>
             ))}
           </select>
           <button
             onClick={loadAudioDevices}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-            title="Refresh device list"
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex-shrink-0"
+            title="Обновить список устройств"
           >
             ↻
           </button>
@@ -201,17 +201,17 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
       {/* Hotkey */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Global Hotkey
+          Горячая клавиша
         </label>
         <div className="flex gap-2">
           <input
             ref={hotkeyInputRef}
             type="text"
-            value={recordingHotkey ? 'Press keys...' : localSettings.hotkey}
+            value={recordingHotkey ? 'Нажмите клавиши...' : localSettings.hotkey}
             onFocus={startHotkeyRecording}
             readOnly
-            placeholder="Click to set hotkey..."
-            className={`flex-1 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
+            placeholder="Нажмите для назначения..."
+            className={`flex-1 min-w-0 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
               recordingHotkey
                 ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-500'
                 : 'border-gray-300 hover:border-gray-400'
@@ -220,21 +220,21 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
           {recordingHotkey && (
             <button
               onClick={() => setRecordingHotkey(false)}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors flex-shrink-0"
             >
-              Cancel
+              Отмена
             </button>
           )}
         </div>
         <p className="text-xs text-gray-500">
-          Click the field, then press your desired key combination (e.g., Ctrl+Shift+Space)
+          Нажмите на поле и введите комбинацию клавиш (например, Ctrl+Shift+Space)
         </p>
       </div>
 
       {/* Insert Mode */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-gray-700">
-          Text Insertion Mode
+          Режим вставки текста
         </label>
         <div className="space-y-2">
           <label className="flex items-center gap-2 cursor-pointer">
@@ -246,7 +246,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               onChange={() => handleChange('insertMode', 'type')}
               className="text-primary-600 focus:ring-primary-500"
             />
-            <span className="text-sm text-gray-700">Type text directly (auto-paste)</span>
+            <span className="text-sm text-gray-700">Автовставка (вставляет автоматически)</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -258,10 +258,28 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               className="text-primary-600 focus:ring-primary-500"
             />
             <span className="text-sm text-gray-700">
-              Copy to clipboard only (you paste with Ctrl+V)
+              Только буфер обмена (вставьте через Ctrl+V)
             </span>
           </label>
         </div>
+      </div>
+
+      {/* Sound notifications */}
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={localSettings.soundEnabled}
+            onChange={(e) => handleChange('soundEnabled', e.target.checked)}
+            className="rounded text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            Звуковые уведомления
+          </span>
+        </label>
+        <p className="text-xs text-gray-500 ml-6">
+          Воспроизводить звук при начале и окончании записи
+        </p>
       </div>
 
       {/* Post-processing */}
@@ -274,11 +292,11 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
             className="rounded text-primary-600 focus:ring-primary-500"
           />
           <span className="text-sm font-medium text-gray-700">
-            Enable post-processing
+            Постобработка текста
           </span>
         </label>
         <p className="text-xs text-gray-500 ml-6">
-          Process voice commands like "period", "comma", "new line"
+          Распознавание команд: «точка», «запятая», «новая строка»
         </p>
       </div>
 
@@ -292,7 +310,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
             className="rounded text-primary-600 focus:ring-primary-500"
           />
           <span className="text-sm font-medium text-gray-700">
-            Start on system login
+            Запускать при входе в систему
           </span>
         </label>
       </div>
@@ -308,7 +326,7 @@ export const Settings: React.FC<SettingsProps> = ({ settings, onSave }) => {
               : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
         >
-          Save Settings
+          Сохранить настройки
         </button>
       </div>
     </div>

@@ -1,22 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import { setupIPC } from './ipc';
 import { registerHotkey, unregisterAllShortcuts, setupRecordingStateSync } from './shortcuts';
 import { createTray, destroyTray, updateTrayState } from './tray';
 import { IPC_CHANNELS, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling
-let squirrelStartup = false;
-try {
-  squirrelStartup = require('electron-squirrel-startup');
-} catch {
-  // Not in production build
-}
-
-if (squirrelStartup) {
-  app.quit();
-}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -40,6 +28,9 @@ function createWindow(): void {
     },
     icon: path.join(__dirname, '../../assets/icon.png'),
   });
+
+  // Remove the application menu
+  Menu.setApplicationMenu(null);
 
   // Load the app
   if (isDev) {

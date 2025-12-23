@@ -38,8 +38,8 @@ export const RecordingOverlay: React.FC<RecordingOverlayProps> = ({
               />
             </div>
           ),
-          text: 'Listening...',
-          subtext: 'Press hotkey again to stop',
+          text: 'Слушаю...',
+          subtext: 'Нажмите хоткей снова для остановки',
           color: 'text-recording',
         };
       case 'processing':
@@ -67,8 +67,8 @@ export const RecordingOverlay: React.FC<RecordingOverlayProps> = ({
               </svg>
             </div>
           ),
-          text: 'Processing...',
-          subtext: 'Transcribing your speech',
+          text: 'Обработка...',
+          subtext: 'Распознавание речи',
           color: 'text-processing',
         };
       case 'error':
@@ -90,8 +90,8 @@ export const RecordingOverlay: React.FC<RecordingOverlayProps> = ({
               </svg>
             </div>
           ),
-          text: 'Error',
-          subtext: 'Something went wrong',
+          text: 'Ошибка',
+          subtext: 'Что-то пошло не так',
           color: 'text-gray-500',
         };
       default:
@@ -116,7 +116,7 @@ export const RecordingOverlay: React.FC<RecordingOverlayProps> = ({
             onClick={onCancel}
             className="mt-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            Cancel
+            Отмена
           </button>
         )}
       </div>

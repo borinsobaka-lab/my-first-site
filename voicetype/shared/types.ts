@@ -8,6 +8,8 @@ export interface AppSettings {
   selectedMicrophone: string | null;
   autoStart: boolean;
   postProcessing: boolean;
+  soundEnabled: boolean;
+  totalRecordingSeconds: number;
 }
 
 // Recording states
@@ -57,28 +59,30 @@ export const DEFAULT_SETTINGS: AppSettings = {
   selectedMicrophone: null,
   autoStart: false,
   postProcessing: false,
+  soundEnabled: true,
+  totalRecordingSeconds: 0,
 };
 
-// Supported languages for Whisper API
+// Supported languages for Whisper API (with Russian names)
 export const SUPPORTED_LANGUAGES = [
-  { code: 'auto', name: 'Auto-detect' },
-  { code: 'en', name: 'English' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'de', name: 'German' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'pl', name: 'Polish' },
-  { code: 'uk', name: 'Ukrainian' },
-  { code: 'tr', name: 'Turkish' },
-  { code: 'nl', name: 'Dutch' },
-  { code: 'sv', name: 'Swedish' },
-  { code: 'cs', name: 'Czech' },
-  { code: 'el', name: 'Greek' },
+  { code: 'auto', name: 'Автоопределение' },
+  { code: 'ru', name: 'Русский' },
+  { code: 'en', name: 'Английский' },
+  { code: 'de', name: 'Немецкий' },
+  { code: 'es', name: 'Испанский' },
+  { code: 'fr', name: 'Французский' },
+  { code: 'it', name: 'Итальянский' },
+  { code: 'pt', name: 'Португальский' },
+  { code: 'ja', name: 'Японский' },
+  { code: 'zh', name: 'Китайский' },
+  { code: 'ko', name: 'Корейский' },
+  { code: 'ar', name: 'Арабский' },
+  { code: 'hi', name: 'Хинди' },
+  { code: 'pl', name: 'Польский' },
+  { code: 'uk', name: 'Украинский' },
+  { code: 'tr', name: 'Турецкий' },
+  { code: 'nl', name: 'Нидерландский' },
+  { code: 'sv', name: 'Шведский' },
+  { code: 'cs', name: 'Чешский' },
+  { code: 'el', name: 'Греческий' },
 ] as const;

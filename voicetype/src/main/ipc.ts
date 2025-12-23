@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { IPC_CHANNELS, AppSettings, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
 import { insertText } from './textInput';
+import { updateHotkey } from './shortcuts';
 
 export function setupIPC(_mainWindow: BrowserWindow): void {
   // Handle settings get request
@@ -11,7 +12,15 @@ export function setupIPC(_mainWindow: BrowserWindow): void {
 
   // Handle settings set request
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_event, settings: Partial<AppSettings>) => {
+    const oldHotkey = settingsManager.get('hotkey');
     settingsManager.setMultiple(settings);
+
+    // Re-register hotkey if it was changed
+    if (settings.hotkey && settings.hotkey !== oldHotkey) {
+      console.log('Hotkey changed, re-registering:', settings.hotkey);
+      updateHotkey();
+    }
+
     return settingsManager.getAll();
   });
 
