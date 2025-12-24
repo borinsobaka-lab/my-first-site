@@ -1,10 +1,21 @@
+/**
+ * Text Input Module
+ * Handles inserting transcribed text into the active window
+ */
+
 import { clipboard } from 'electron';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { restoreFocusToWindow, sendCtrlV, hasCapturedWindow, clearCapturedWindow } from './windowFocus';
+import {
+  restoreFocusToWindow,
+  sendCtrlV,
+  hasCapturedWindow,
+  clearCapturedWindow,
+  getCapturedWindowInfo
+} from './windowFocus';
 
 const execAsync = promisify(exec);
 
@@ -12,105 +23,135 @@ type InsertMode = 'type' | 'clipboard';
 
 /**
  * Insert text into the currently active text field
- * @param text - The text to insert
- * @param mode - 'type' to simulate keyboard typing, 'clipboard' to copy only
  */
 export async function insertText(text: string, mode: InsertMode): Promise<void> {
+  console.log('=== insertText called ===');
+  console.log('Text length:', text.length);
+  console.log('Mode:', mode);
+  console.log('Text preview:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
+
   if (mode === 'clipboard') {
     // Clipboard mode: just copy text, user pastes manually
     clipboard.writeText(text);
-    console.log('Text copied to clipboard');
+    console.log('Text copied to clipboard (clipboard mode)');
     return;
   }
 
-  // Type mode: copy to clipboard and simulate Ctrl+V paste
-  await copyAndPaste(text);
+  // Type mode: copy to clipboard and simulate paste
+  await autoPaste(text);
 }
 
 /**
- * Copy text to clipboard and simulate paste
+ * Main auto-paste function
+ * Copies text to clipboard, restores focus, and sends Ctrl+V
  */
-async function copyAndPaste(text: string): Promise<void> {
-  // Copy text to clipboard first
-  clipboard.writeText(text);
-  console.log('Text copied to clipboard for auto-paste, length:', text.length);
+async function autoPaste(text: string): Promise<void> {
+  console.log('=== autoPaste started ===');
+  console.log('Captured window:', getCapturedWindowInfo());
 
-  const platform = process.platform;
+  // Step 1: Copy text to clipboard FIRST
+  clipboard.writeText(text);
+  console.log('Step 1: Text copied to clipboard');
+
+  // Step 2: Small delay to ensure clipboard is ready
+  await delay(50);
+
+  // Step 3: Restore focus to the original window
+  console.log('Step 2: Restoring focus to original window...');
+  if (hasCapturedWindow()) {
+    const focusRestored = await restoreFocusToWindow();
+    console.log('Focus restore result:', focusRestored);
+  } else {
+    console.log('No captured window - will paste to current foreground window');
+  }
+
+  // Step 4: Wait for Windows to process focus change
+  await delay(150);
+
+  // Step 5: Try to paste using multiple methods
+  console.log('Step 3: Attempting to paste...');
   let pasted = false;
 
-  if (platform === 'win32') {
-    // On Windows, first restore focus to the target window
-    if (hasCapturedWindow()) {
-      console.log('Restoring focus to captured window...');
-      const focusRestored = await restoreFocusToWindow();
-      console.log('Focus restored:', focusRestored);
-      // Give Windows time to process the focus change
-      await delay(200);
-    }
-
-    // Method 1: koffi keybd_event (Windows API direct)
-    console.log('Trying koffi keybd_event...');
-    pasted = await sendCtrlV();
-
-    // Method 2: VBScript via mshta (fast, inline)
-    if (!pasted) {
-      console.log('Trying mshta VBScript...');
-      pasted = await pasteWithMshta();
-    }
-
-    // Method 3: VBScript via cscript (temp file)
-    if (!pasted) {
-      console.log('Trying cscript VBScript...');
-      pasted = await pasteWithVBScript();
-    }
-
-    // Method 4: PowerShell with WScript.Shell COM
-    if (!pasted) {
-      console.log('Trying PowerShell WScript.Shell...');
-      pasted = await pasteWithPowerShellWScript();
-    }
-
-    // Method 5: PowerShell with System.Windows.Forms
-    if (!pasted) {
-      console.log('Trying PowerShell SendKeys...');
-      pasted = await pasteWithPowerShell();
-    }
-
-    // Clear captured window after all attempts
-    clearCapturedWindow();
-  }
-
-  if (!pasted && platform === 'darwin') {
-    // On macOS, try AppleScript
-    pasted = await pasteWithAppleScript();
-  }
-
+  // Method 1: koffi keybd_event (fastest, no subprocess)
   if (!pasted) {
-    console.log('All paste methods failed. Text is in clipboard - paste manually with Ctrl+V');
+    console.log('Trying method 1: koffi keybd_event');
+    pasted = await sendCtrlV();
+    if (pasted) console.log('SUCCESS: Pasted via koffi');
+  }
+
+  // Method 2: PowerShell SendKeys (most compatible)
+  if (!pasted) {
+    console.log('Trying method 2: PowerShell SendKeys');
+    pasted = await pasteWithPowerShell();
+    if (pasted) console.log('SUCCESS: Pasted via PowerShell');
+  }
+
+  // Method 3: VBScript inline via mshta
+  if (!pasted) {
+    console.log('Trying method 3: mshta VBScript');
+    pasted = await pasteWithMshta();
+    if (pasted) console.log('SUCCESS: Pasted via mshta');
+  }
+
+  // Method 4: VBScript file via cscript
+  if (!pasted) {
+    console.log('Trying method 4: cscript VBScript');
+    pasted = await pasteWithCscript();
+    if (pasted) console.log('SUCCESS: Pasted via cscript');
+  }
+
+  // Clear captured window
+  clearCapturedWindow();
+
+  if (pasted) {
+    console.log('=== autoPaste completed successfully ===');
   } else {
-    console.log('Text pasted successfully');
+    console.log('=== autoPaste FAILED - text is in clipboard, paste manually with Ctrl+V ===');
   }
 }
 
 /**
- * Paste using mshta.exe with inline VBScript (Windows)
- * This is fast as it doesn't require starting a full shell
+ * Paste using PowerShell with multiple approaches
+ */
+async function pasteWithPowerShell(): Promise<boolean> {
+  try {
+    // Use System.Windows.Forms.SendKeys
+    const script = `
+      Add-Type -AssemblyName System.Windows.Forms
+      Start-Sleep -Milliseconds 100
+      [System.Windows.Forms.SendKeys]::SendWait('^v')
+    `.replace(/\n/g, '; ');
+
+    await execAsync(
+      `powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${script}"`,
+      { windowsHide: true, timeout: 5000 }
+    );
+    return true;
+  } catch (error) {
+    console.error('PowerShell paste failed:', error);
+
+    // Try alternative PowerShell approach with WScript.Shell
+    try {
+      const altScript = `$wsh = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 100; $wsh.SendKeys('^v')`;
+      await execAsync(
+        `powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${altScript}"`,
+        { windowsHide: true, timeout: 5000 }
+      );
+      return true;
+    } catch (altError) {
+      console.error('Alternative PowerShell paste also failed:', altError);
+      return false;
+    }
+  }
+}
+
+/**
+ * Paste using mshta with inline VBScript
  */
 async function pasteWithMshta(): Promise<boolean> {
   try {
-    console.log('Attempting paste with mshta (VBScript inline)...');
-
-    // mshta can execute VBScript inline
-    // The VBScript creates a WScript.Shell object and sends Ctrl+V
-    const vbscript = 'CreateObject("WScript.Shell").SendKeys "^v"';
-    const command = `mshta vbscript:Execute("${vbscript}:close")`;
-
-    await execAsync(command, {
-      windowsHide: true,
-      timeout: 3000,
-    });
-
-    console.log('Paste with mshta successful');
+    const command = `mshta vbscript:Execute("CreateObject(""WScript.Shell"").SendKeys ""^v"":close")`;
+    await execAsync(command, { windowsHide: true, timeout: 3000 });
     return true;
   } catch (error) {
     console.error('mshta paste failed:', error);
@@ -119,123 +160,40 @@ async function pasteWithMshta(): Promise<boolean> {
 }
 
 /**
- * Paste using VBScript via cscript (Windows)
- * Creates a temp VBS file and executes it
+ * Paste using cscript with VBS file
  */
-async function pasteWithVBScript(): Promise<boolean> {
+async function pasteWithCscript(): Promise<boolean> {
   const tempFile = path.join(os.tmpdir(), `voicetype_paste_${Date.now()}.vbs`);
 
   try {
-    console.log('Attempting paste with VBScript file...');
-
-    // Create VBScript that sends Ctrl+V
-    const vbscript = `
+    const vbsContent = `
 Set WshShell = CreateObject("WScript.Shell")
-WScript.Sleep 50
+WScript.Sleep 100
 WshShell.SendKeys "^v"
-`;
+`.trim();
 
-    // Write to temp file
-    fs.writeFileSync(tempFile, vbscript, 'utf8');
-
-    // Execute with cscript (console script host, no GUI)
-    await execAsync(`cscript //nologo //B "${tempFile}"`, {
-      windowsHide: true,
-      timeout: 3000,
-    });
-
-    console.log('Paste with VBScript successful');
+    fs.writeFileSync(tempFile, vbsContent, 'utf8');
+    await execAsync(`cscript //nologo //B "${tempFile}"`, { windowsHide: true, timeout: 3000 });
     return true;
   } catch (error) {
-    console.error('VBScript paste failed:', error);
+    console.error('cscript paste failed:', error);
     return false;
   } finally {
-    // Clean up temp file
     try {
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-      }
-    } catch {
-      // Ignore cleanup errors
-    }
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    } catch {}
   }
 }
 
 /**
- * Paste using PowerShell with WScript.Shell COM object (Windows)
- * Alternative to System.Windows.Forms.SendKeys
- */
-async function pasteWithPowerShellWScript(): Promise<boolean> {
-  try {
-    console.log('Attempting paste with PowerShell WScript.Shell...');
-
-    // Use WScript.Shell COM object instead of Windows Forms
-    const script = `$wsh = New-Object -ComObject WScript.Shell; Start-Sleep -Milliseconds 50; $wsh.SendKeys('^v')`;
-
-    await execAsync(`powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${script}"`, {
-      windowsHide: true,
-      timeout: 5000,
-    });
-
-    console.log('Paste with PowerShell WScript.Shell successful');
-    return true;
-  } catch (error) {
-    console.error('PowerShell WScript.Shell paste failed:', error);
-    return false;
-  }
-}
-
-/**
- * Paste using PowerShell with System.Windows.Forms (Windows)
- * Uses .NET SendKeys
- */
-async function pasteWithPowerShell(): Promise<boolean> {
-  try {
-    console.log('Attempting paste with PowerShell SendKeys...');
-
-    // Use PowerShell to send Ctrl+V via Windows Forms SendKeys
-    // ^v means Ctrl+V in SendKeys notation
-    const script = `Add-Type -AssemblyName System.Windows.Forms; Start-Sleep -Milliseconds 50; [System.Windows.Forms.SendKeys]::SendWait('^v')`;
-
-    await execAsync(`powershell -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${script}"`, {
-      windowsHide: true,
-      timeout: 5000,
-    });
-
-    console.log('Paste with PowerShell successful');
-    return true;
-  } catch (error) {
-    console.error('PowerShell paste failed:', error);
-    return false;
-  }
-}
-
-/**
- * Paste using AppleScript (macOS)
- */
-async function pasteWithAppleScript(): Promise<boolean> {
-  try {
-    console.log('Attempting paste with AppleScript...');
-
-    await execAsync(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`);
-
-    console.log('Paste with AppleScript successful');
-    return true;
-  } catch (error) {
-    console.error('AppleScript paste failed:', error);
-    return false;
-  }
-}
-
-/**
- * Simple delay helper
+ * Delay helper
  */
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Check if text input simulation is available
+ * Check if typing is available on this platform
  */
 export function isTypingAvailable(): boolean {
   return process.platform === 'win32' || process.platform === 'darwin';
