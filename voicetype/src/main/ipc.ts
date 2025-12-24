@@ -3,11 +3,13 @@ import { IPC_CHANNELS, AppSettings, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
 import { insertText } from './textInput';
 import { updateHotkey } from './shortcuts';
+import { getLogs, clearLogs, logInfo, logError, logSuccess, setLoggerWindow } from './logger';
 
 let mainWindowRef: BrowserWindow | null = null;
 
 export function setupIPC(mainWindow: BrowserWindow): void {
   mainWindowRef = mainWindow;
+  setLoggerWindow(mainWindow);
 
   // Handle settings get request
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => {
@@ -33,35 +35,52 @@ export function setupIPC(mainWindow: BrowserWindow): void {
     const insertMode = settingsManager.get('insertMode');
     const textLength = data.text?.length || 0;
 
-    console.log(`Inserting text: ${textLength} characters, mode: ${insertMode}`);
+    logInfo(`Вставка текста: ${textLength} символов`, `Режим: ${insertMode === 'type' ? 'автовставка' : 'буфер обмена'}`);
 
     // For auto-paste mode, hide VoiceType window to not interfere
-    // The focus restoration to the target window is handled by textInput.ts
-    // using the captured window handle from when recording started
     if (insertMode === 'type' && mainWindowRef) {
       const wasVisible = mainWindowRef.isVisible();
       if (wasVisible) {
-        console.log('Hiding VoiceType window before paste');
         mainWindowRef.hide();
-        // Small delay to ensure window is hidden
         await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
 
-    await insertText(data.text, insertMode);
-    console.log(insertMode === 'type' ? 'Text insertion completed' : 'Text copied to clipboard');
+    try {
+      await insertText(data.text, insertMode);
+      if (insertMode === 'type') {
+        logSuccess('Текст вставлен успешно', `Текст: "${data.text.substring(0, 50)}${data.text.length > 50 ? '...' : ''}"`);
+      } else {
+        logSuccess('Текст скопирован в буфер обмена');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logError('Ошибка вставки текста', errorMessage);
+      throw error;
+    }
 
     return { success: true };
   });
 
-  // Handle transcription result (for logging/analytics)
+  // Handle transcription result
   ipcMain.on(IPC_CHANNELS.TRANSCRIPTION_RESULT, (_event, data: { text: string }) => {
-    console.log('Transcription received:', data.text);
+    logInfo('Транскрибация получена', `Текст: "${data.text.substring(0, 100)}${data.text.length > 100 ? '...' : ''}"`);
   });
 
   // Handle transcription error
   ipcMain.on(IPC_CHANNELS.TRANSCRIPTION_ERROR, (_event, data: { error: string }) => {
-    console.error('Transcription error:', data.error);
+    logError('Ошибка транскрибации', data.error);
+  });
+
+  // Handle logs get request
+  ipcMain.handle(IPC_CHANNELS.LOGS_GET, () => {
+    return getLogs();
+  });
+
+  // Handle logs clear request
+  ipcMain.handle(IPC_CHANNELS.LOGS_CLEAR, () => {
+    clearLogs();
+    return { success: true };
   });
 }
 

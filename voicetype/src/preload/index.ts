@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppSettings, RecordingState, IPC_CHANNELS } from '../../shared/types';
+import { AppSettings, RecordingState, LogEntry, IPC_CHANNELS } from '../../shared/types';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -67,6 +67,23 @@ const electronAPI = {
     ipcRenderer.on('show-about', subscription);
     return () => {
       ipcRenderer.removeListener('show-about', subscription);
+    };
+  },
+
+  // Logs
+  getLogs: (): Promise<LogEntry[]> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.LOGS_GET);
+  },
+
+  clearLogs: (): Promise<{ success: boolean }> => {
+    return ipcRenderer.invoke(IPC_CHANNELS.LOGS_CLEAR);
+  },
+
+  onLogMessage: (callback: (entry: LogEntry) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, entry: LogEntry) => callback(entry);
+    ipcRenderer.on(IPC_CHANNELS.LOG_MESSAGE, subscription);
+    return () => {
+      ipcRenderer.removeListener(IPC_CHANNELS.LOG_MESSAGE, subscription);
     };
   },
 

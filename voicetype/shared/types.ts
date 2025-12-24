@@ -31,6 +31,7 @@ export const IPC_CHANNELS = {
   RECORDING_START: 'recording:start',
   RECORDING_STOP: 'recording:stop',
   STATE_CHANGED: 'state:changed',
+  LOG_MESSAGE: 'log:message',
 
   // Renderer → Main
   TRANSCRIPTION_RESULT: 'transcription:result',
@@ -39,6 +40,8 @@ export const IPC_CHANNELS = {
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESPONSE: 'settings:response',
   TEXT_INSERT: 'text:insert',
+  LOGS_GET: 'logs:get',
+  LOGS_CLEAR: 'logs:clear',
 
   // Window controls
   WINDOW_SHOW_SETTINGS: 'window:show-settings',
@@ -47,6 +50,15 @@ export const IPC_CHANNELS = {
   // Tray
   TRAY_UPDATE_STATE: 'tray:update-state',
 } as const;
+
+// Log entry type
+export interface LogEntry {
+  id: number;
+  timestamp: Date;
+  level: 'info' | 'warn' | 'error' | 'success';
+  message: string;
+  details?: string;
+}
 
 // Default settings
 export const DEFAULT_SETTINGS: AppSettings = {

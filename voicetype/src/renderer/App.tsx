@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AppSettings, RecordingState, DEFAULT_SETTINGS } from '../../shared/types';
+import { AppSettings, RecordingState, LogEntry, DEFAULT_SETTINGS } from '../../shared/types';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { transcribe } from './services/whisper';
 import { playStartSound, playStopSound, playErrorSound } from './services/sounds';
@@ -35,8 +35,9 @@ const App: React.FC = () => {
   const [state, setState] = useState<RecordingState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
-  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'logs' | 'settings'>('home');
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   const { isRecording, startRecording, stopRecording } = useAudioRecorder();
   const settingsRef = useRef(settings);
@@ -52,9 +53,10 @@ const App: React.FC = () => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
-  // Load settings on mount
+  // Load settings and logs on mount
   useEffect(() => {
     loadSettings();
+    loadLogs();
 
     // Listen for recording start/stop from main process
     const unsubStart = window.electronAPI.onRecordingStart(() => {
@@ -69,10 +71,16 @@ const App: React.FC = () => {
       setShowAbout(true);
     });
 
+    // Listen for new log messages
+    const unsubLog = window.electronAPI.onLogMessage((entry: LogEntry) => {
+      setLogs(prev => [...prev, entry].slice(-100)); // Keep last 100
+    });
+
     return () => {
       unsubStart();
       unsubStop();
       unsubAbout();
+      unsubLog();
     };
   }, []);
 
@@ -92,6 +100,24 @@ const App: React.FC = () => {
       setSettings(loadedSettings);
     } catch (err) {
       console.error('Failed to load settings:', err);
+    }
+  };
+
+  const loadLogs = async () => {
+    try {
+      const loadedLogs = await window.electronAPI.getLogs();
+      setLogs(loadedLogs);
+    } catch (err) {
+      console.error('Failed to load logs:', err);
+    }
+  };
+
+  const clearLogs = async () => {
+    try {
+      await window.electronAPI.clearLogs();
+      setLogs([]);
+    } catch (err) {
+      console.error('Failed to clear logs:', err);
     }
   };
 
@@ -277,6 +303,20 @@ const App: React.FC = () => {
             }`}
           >
             История {history.length > 0 && `(${history.length})`}
+          </button>
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'logs'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Логи {logs.filter(l => l.level === 'error').length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">
+                {logs.filter(l => l.level === 'error').length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -493,6 +533,108 @@ const App: React.FC = () => {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-800">Логи</h2>
+              {logs.length > 0 && (
+                <button
+                  onClick={clearLogs}
+                  className="text-sm text-red-600 hover:text-red-700"
+                >
+                  Очистить
+                </button>
+              )}
+            </div>
+
+            {logs.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 shadow-sm border text-center">
+                <p className="text-gray-500">Логов пока нет</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Здесь будут отображаться события и ошибки
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...logs].reverse().map((log) => (
+                  <div
+                    key={log.id}
+                    className={`rounded-lg p-3 border ${
+                      log.level === 'error'
+                        ? 'bg-red-50 border-red-200'
+                        : log.level === 'warn'
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : log.level === 'success'
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-white border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs ${
+                          log.level === 'error'
+                            ? 'bg-red-500 text-white'
+                            : log.level === 'warn'
+                            ? 'bg-yellow-500 text-white'
+                            : log.level === 'success'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-blue-500 text-white'
+                        }`}
+                      >
+                        {log.level === 'error' ? '!' : log.level === 'warn' ? '⚠' : log.level === 'success' ? '✓' : 'i'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${
+                          log.level === 'error'
+                            ? 'text-red-800'
+                            : log.level === 'warn'
+                            ? 'text-yellow-800'
+                            : log.level === 'success'
+                            ? 'text-green-800'
+                            : 'text-gray-800'
+                        }`}>
+                          {log.message}
+                        </p>
+                        {log.details && (
+                          <p className={`text-xs mt-1 break-words ${
+                            log.level === 'error'
+                              ? 'text-red-600'
+                              : log.level === 'warn'
+                              ? 'text-yellow-600'
+                              : log.level === 'success'
+                              ? 'text-green-600'
+                              : 'text-gray-500'
+                          }`}>
+                            {log.details}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(log.timestamp).toLocaleString('ru-RU')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Copy logs button */}
+            {logs.length > 0 && (
+              <button
+                onClick={() => {
+                  const logText = logs.map(log =>
+                    `[${new Date(log.timestamp).toLocaleString('ru-RU')}] [${log.level.toUpperCase()}] ${log.message}${log.details ? ` - ${log.details}` : ''}`
+                  ).join('\n');
+                  navigator.clipboard.writeText(logText);
+                }}
+                className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors"
+              >
+                Копировать все логи
+              </button>
             )}
           </div>
         )}
