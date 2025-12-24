@@ -10,76 +10,6 @@ const execAsync = promisify(exec);
 
 type InsertMode = 'type' | 'clipboard';
 
-// Keysender for Windows (hardware-level keyboard injection)
-let keysenderAvailable = false;
-let keysenderHardware: any = null;
-let keysenderLoading: Promise<boolean> | null = null;
-
-/**
- * Load keysender for Windows
- */
-async function loadKeysender(): Promise<boolean> {
-  if (keysenderAvailable) return true;
-  if (process.platform !== 'win32') return false;
-  if (keysenderLoading) return keysenderLoading;
-
-  keysenderLoading = (async () => {
-    try {
-      const keysender = await import('keysender');
-      // Hardware class injects keyboard events at hardware level
-      keysenderHardware = new keysender.Hardware();
-      keysenderAvailable = true;
-      console.log('keysender loaded successfully');
-      return true;
-    } catch (error) {
-      console.warn('keysender not available:', error);
-      keysenderAvailable = false;
-      return false;
-    }
-  })();
-
-  return keysenderLoading;
-}
-
-// nut-js as fallback
-let nutjsAvailable = false;
-let keyboard: any = null;
-let Key: any = null;
-let nutjsLoading: Promise<boolean> | null = null;
-
-async function loadNutJs(): Promise<boolean> {
-  if (nutjsAvailable) return true;
-  if (nutjsLoading) return nutjsLoading;
-
-  nutjsLoading = (async () => {
-    try {
-      const nutjs = await import('@nut-tree-fork/nut-js');
-      keyboard = nutjs.keyboard;
-      Key = nutjs.Key;
-
-      if (keyboard && keyboard.config) {
-        keyboard.config.autoDelayMs = 0;
-      }
-
-      nutjsAvailable = true;
-      console.log('nut-js loaded successfully');
-      return true;
-    } catch (error) {
-      console.warn('nut-js not available:', error);
-      nutjsAvailable = false;
-      return false;
-    }
-  })();
-
-  return nutjsLoading;
-}
-
-// Initialize on module load
-if (process.platform === 'win32') {
-  loadKeysender();
-}
-loadNutJs();
-
 /**
  * Insert text into the currently active text field
  * @param text - The text to insert
@@ -118,35 +48,31 @@ async function copyAndPaste(text: string): Promise<void> {
       await delay(200);
     }
 
-    // Method 1: keysender Hardware (hardware-level keyboard injection)
-    await loadKeysender();
-    if (keysenderAvailable && keysenderHardware) {
-      pasted = await pasteWithKeysender();
-    }
+    // Method 1: koffi keybd_event (Windows API direct)
+    console.log('Trying koffi keybd_event...');
+    pasted = await sendCtrlV();
 
-    // Method 2: koffi keybd_event (Windows API)
-    if (!pasted && hasCapturedWindow()) {
-      console.log('Trying koffi keybd_event...');
-      pasted = await sendCtrlV();
-    }
-
-    // Method 3: VBScript via mshta (fast, inline)
+    // Method 2: VBScript via mshta (fast, inline)
     if (!pasted) {
+      console.log('Trying mshta VBScript...');
       pasted = await pasteWithMshta();
     }
 
-    // Method 4: VBScript via cscript (temp file)
+    // Method 3: VBScript via cscript (temp file)
     if (!pasted) {
+      console.log('Trying cscript VBScript...');
       pasted = await pasteWithVBScript();
     }
 
-    // Method 5: PowerShell with WScript.Shell COM
+    // Method 4: PowerShell with WScript.Shell COM
     if (!pasted) {
+      console.log('Trying PowerShell WScript.Shell...');
       pasted = await pasteWithPowerShellWScript();
     }
 
-    // Method 6: Original PowerShell method
+    // Method 5: PowerShell with System.Windows.Forms
     if (!pasted) {
+      console.log('Trying PowerShell SendKeys...');
       pasted = await pasteWithPowerShell();
     }
 
@@ -159,14 +85,6 @@ async function copyAndPaste(text: string): Promise<void> {
     pasted = await pasteWithAppleScript();
   }
 
-  // Fallback to nut-js if native method failed
-  if (!pasted) {
-    await loadNutJs();
-    if (nutjsAvailable) {
-      pasted = await pasteWithNutJs();
-    }
-  }
-
   if (!pasted) {
     console.log('All paste methods failed. Text is in clipboard - paste manually with Ctrl+V');
   } else {
@@ -175,38 +93,14 @@ async function copyAndPaste(text: string): Promise<void> {
 }
 
 /**
- * Paste using keysender Hardware class (Windows)
- * Uses hardware-level keyboard injection which is most reliable
- */
-async function pasteWithKeysender(): Promise<boolean> {
-  if (!keysenderAvailable || !keysenderHardware) {
-    return false;
-  }
-
-  try {
-    console.log('Attempting paste with keysender Hardware...');
-
-    // Send Ctrl+V using keysender
-    // The sendKey method accepts an array of keys and delay in ms
-    await keysenderHardware.keyboard.sendKey(['ctrl', 'v'], 50);
-
-    console.log('Paste with keysender successful');
-    return true;
-  } catch (error) {
-    console.error('keysender paste failed:', error);
-    return false;
-  }
-}
-
-/**
  * Paste using mshta.exe with inline VBScript (Windows)
- * This is the fastest method as it doesn't require starting a shell
+ * This is fast as it doesn't require starting a full shell
  */
 async function pasteWithMshta(): Promise<boolean> {
   try {
     console.log('Attempting paste with mshta (VBScript inline)...');
 
-    // mshta can execute VBScript inline - this is very fast
+    // mshta can execute VBScript inline
     // The VBScript creates a WScript.Shell object and sends Ctrl+V
     const vbscript = 'CreateObject("WScript.Shell").SendKeys "^v"';
     const command = `mshta vbscript:Execute("${vbscript}:close")`;
@@ -293,7 +187,7 @@ async function pasteWithPowerShellWScript(): Promise<boolean> {
 
 /**
  * Paste using PowerShell with System.Windows.Forms (Windows)
- * Uses .NET SendKeys which is very reliable
+ * Uses .NET SendKeys
  */
 async function pasteWithPowerShell(): Promise<boolean> {
   try {
@@ -334,43 +228,6 @@ async function pasteWithAppleScript(): Promise<boolean> {
 }
 
 /**
- * Paste using nut-js (cross-platform fallback)
- */
-async function pasteWithNutJs(): Promise<boolean> {
-  if (!nutjsAvailable || !keyboard || !Key) {
-    return false;
-  }
-
-  try {
-    console.log('Attempting paste with nut-js...');
-
-    const isMac = process.platform === 'darwin';
-    const modifierKey = isMac ? Key.LeftSuper : Key.LeftControl;
-
-    // Press modifier
-    await keyboard.pressKey(modifierKey);
-    await delay(50);
-
-    // Press V
-    await keyboard.pressKey(Key.V);
-    await delay(50);
-
-    // Release V
-    await keyboard.releaseKey(Key.V);
-    await delay(50);
-
-    // Release modifier
-    await keyboard.releaseKey(modifierKey);
-
-    console.log('Paste with nut-js successful');
-    return true;
-  } catch (error) {
-    console.error('nut-js paste failed:', error);
-    return false;
-  }
-}
-
-/**
  * Simple delay helper
  */
 function delay(ms: number): Promise<void> {
@@ -381,5 +238,5 @@ function delay(ms: number): Promise<void> {
  * Check if text input simulation is available
  */
 export function isTypingAvailable(): boolean {
-  return nutjsAvailable || process.platform === 'win32' || process.platform === 'darwin';
+  return process.platform === 'win32' || process.platform === 'darwin';
 }
