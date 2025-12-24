@@ -8,87 +8,45 @@ import { restoreFocusToWindow, sendCtrlV, hasCapturedWindow, clearCapturedWindow
 
 const execAsync = promisify(exec);
 
-// Windows API via koffi for direct keyboard simulation
-let koffiLoaded = false;
-let user32: any = null;
-let SendInput: any = null;
-let koffiLoading: Promise<boolean> | null = null;
+type InsertMode = 'type' | 'clipboard';
 
-// Windows API constants
-const INPUT_KEYBOARD = 1;
-const KEYEVENTF_KEYUP = 0x0002;
-const VK_CONTROL = 0x11;
-const VK_V = 0x56;
+// Keysender for Windows (hardware-level keyboard injection)
+let keysenderAvailable = false;
+let keysenderHardware: any = null;
+let keysenderLoading: Promise<boolean> | null = null;
 
 /**
- * Load koffi and setup Windows API bindings
+ * Load keysender for Windows
  */
-async function loadKoffi(): Promise<boolean> {
-  if (koffiLoaded) return true;
+async function loadKeysender(): Promise<boolean> {
+  if (keysenderAvailable) return true;
   if (process.platform !== 'win32') return false;
-  if (koffiLoading) return koffiLoading;
+  if (keysenderLoading) return keysenderLoading;
 
-  koffiLoading = (async () => {
+  keysenderLoading = (async () => {
     try {
-      const koffi = await import('koffi');
-
-      // Define the INPUT structure for SendInput
-      const KEYBDINPUT = koffi.struct('KEYBDINPUT', {
-        wVk: 'uint16',
-        wScan: 'uint16',
-        dwFlags: 'uint32',
-        time: 'uint32',
-        dwExtraInfo: 'uintptr',
-      });
-
-      const MOUSEINPUT = koffi.struct('MOUSEINPUT', {
-        dx: 'int32',
-        dy: 'int32',
-        mouseData: 'uint32',
-        dwFlags: 'uint32',
-        time: 'uint32',
-        dwExtraInfo: 'uintptr',
-      });
-
-      const HARDWAREINPUT = koffi.struct('HARDWAREINPUT', {
-        uMsg: 'uint32',
-        wParamL: 'uint16',
-        wParamH: 'uint16',
-      });
-
-      // INPUT structure with union
-      const INPUT = koffi.struct('INPUT', {
-        type: 'uint32',
-        ki: KEYBDINPUT, // We'll use keyboard input
-      });
-
-      // Load user32.dll
-      user32 = koffi.load('user32.dll');
-
-      // Bind SendInput function
-      SendInput = user32.func('uint32 SendInput(uint32 cInputs, INPUT *pInputs, int cbSize)');
-
-      koffiLoaded = true;
-      console.log('koffi loaded successfully for Windows API');
+      const keysender = await import('keysender');
+      // Hardware class injects keyboard events at hardware level
+      keysenderHardware = new keysender.Hardware();
+      keysenderAvailable = true;
+      console.log('keysender loaded successfully');
       return true;
     } catch (error) {
-      console.warn('koffi not available:', error);
-      koffiLoaded = false;
+      console.warn('keysender not available:', error);
+      keysenderAvailable = false;
       return false;
     }
   })();
 
-  return koffiLoading;
+  return keysenderLoading;
 }
 
-type InsertMode = 'type' | 'clipboard';
-
+// nut-js as fallback
 let nutjsAvailable = false;
 let keyboard: any = null;
 let Key: any = null;
 let nutjsLoading: Promise<boolean> | null = null;
 
-// Try to load nut-js fork
 async function loadNutJs(): Promise<boolean> {
   if (nutjsAvailable) return true;
   if (nutjsLoading) return nutjsLoading;
@@ -99,7 +57,6 @@ async function loadNutJs(): Promise<boolean> {
       keyboard = nutjs.keyboard;
       Key = nutjs.Key;
 
-      // Configure nut-js for faster operation
       if (keyboard && keyboard.config) {
         keyboard.config.autoDelayMs = 0;
       }
@@ -117,7 +74,10 @@ async function loadNutJs(): Promise<boolean> {
   return nutjsLoading;
 }
 
-// Initialize nut-js on module load
+// Initialize on module load
+if (process.platform === 'win32') {
+  loadKeysender();
+}
 loadNutJs();
 
 /**
@@ -143,39 +103,31 @@ export async function insertText(text: string, mode: InsertMode): Promise<void> 
 async function copyAndPaste(text: string): Promise<void> {
   // Copy text to clipboard first
   clipboard.writeText(text);
-  console.log('Text copied to clipboard for auto-paste');
+  console.log('Text copied to clipboard for auto-paste, length:', text.length);
 
   const platform = process.platform;
   let pasted = false;
 
   if (platform === 'win32') {
-    // On Windows, use our window focus tracking for reliable paste
-
-    // First, restore focus to the window that was active when recording started
+    // On Windows, first restore focus to the target window
     if (hasCapturedWindow()) {
       console.log('Restoring focus to captured window...');
       const focusRestored = await restoreFocusToWindow();
       console.log('Focus restored:', focusRestored);
-
       // Give Windows time to process the focus change
-      await delay(150);
-
-      // Use our keybd_event based Ctrl+V (most reliable)
-      pasted = await sendCtrlV();
-
-      // Clear the captured window after we're done
-      clearCapturedWindow();
+      await delay(200);
     }
 
-    // If that didn't work, try other methods
-    if (!pasted) {
-      console.log('Primary paste method failed, trying alternatives...');
+    // Method 1: keysender Hardware (hardware-level keyboard injection)
+    await loadKeysender();
+    if (keysenderAvailable && keysenderHardware) {
+      pasted = await pasteWithKeysender();
+    }
 
-      // Method 2: Windows API SendInput
-      await loadKoffi();
-      if (koffiLoaded) {
-        pasted = await pasteWithWindowsAPI();
-      }
+    // Method 2: koffi keybd_event (Windows API)
+    if (!pasted && hasCapturedWindow()) {
+      console.log('Trying koffi keybd_event...');
+      pasted = await sendCtrlV();
     }
 
     // Method 3: VBScript via mshta (fast, inline)
@@ -197,6 +149,9 @@ async function copyAndPaste(text: string): Promise<void> {
     if (!pasted) {
       pasted = await pasteWithPowerShell();
     }
+
+    // Clear captured window after all attempts
+    clearCapturedWindow();
   }
 
   if (!pasted && platform === 'darwin') {
@@ -220,42 +175,25 @@ async function copyAndPaste(text: string): Promise<void> {
 }
 
 /**
- * Paste using Windows API directly via koffi (Windows)
- * This is the most reliable method as it doesn't spawn any subprocess
+ * Paste using keysender Hardware class (Windows)
+ * Uses hardware-level keyboard injection which is most reliable
  */
-async function pasteWithWindowsAPI(): Promise<boolean> {
-  if (!koffiLoaded || !SendInput) {
+async function pasteWithKeysender(): Promise<boolean> {
+  if (!keysenderAvailable || !keysenderHardware) {
     return false;
   }
 
   try {
-    console.log('Attempting paste with Windows API (SendInput)...');
+    console.log('Attempting paste with keysender Hardware...');
 
-    // Create INPUT structures for Ctrl+V keystrokes
-    // We need: Ctrl down, V down, V up, Ctrl up
-    const inputs = [
-      // Ctrl down
-      { type: INPUT_KEYBOARD, ki: { wVk: VK_CONTROL, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } },
-      // V down
-      { type: INPUT_KEYBOARD, ki: { wVk: VK_V, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 } },
-      // V up
-      { type: INPUT_KEYBOARD, ki: { wVk: VK_V, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } },
-      // Ctrl up
-      { type: INPUT_KEYBOARD, ki: { wVk: VK_CONTROL, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } },
-    ];
+    // Send Ctrl+V using keysender
+    // The sendKey method accepts an array of keys and delay in ms
+    await keysenderHardware.keyboard.sendKey(['ctrl', 'v'], 50);
 
-    // Send all inputs at once
-    const result = SendInput(4, inputs, 40); // 40 = sizeof(INPUT) on x64
-
-    if (result === 4) {
-      console.log('Paste with Windows API successful');
-      return true;
-    } else {
-      console.error('SendInput returned:', result);
-      return false;
-    }
+    console.log('Paste with keysender successful');
+    return true;
   } catch (error) {
-    console.error('Windows API paste failed:', error);
+    console.error('keysender paste failed:', error);
     return false;
   }
 }

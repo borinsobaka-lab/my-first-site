@@ -17,7 +17,7 @@ export default defineConfig({
           build: {
             outDir: 'dist/main',
             rollupOptions: {
-              external: ['electron', '@nut-tree/nut-js', '@nut-tree-fork/nut-js', 'electron-store', 'koffi'],
+              external: ['electron', '@nut-tree/nut-js', '@nut-tree-fork/nut-js', 'electron-store', 'koffi', 'keysender'],
             },
           },
         },

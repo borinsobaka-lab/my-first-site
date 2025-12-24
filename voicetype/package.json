@@ -19,6 +19,7 @@
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.2",
     "electron-store": "^8.1.0",
+    "keysender": "^2.2.0",
     "koffi": "^2.8.0"
   },
   "devDependencies": {
@@ -51,11 +52,13 @@
     "files": [
       "dist/**/*",
       "assets/**/*",
-      "node_modules/koffi/**/*"
+      "node_modules/koffi/**/*",
+      "node_modules/keysender/**/*"
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/koffi/**/*"
+      "node_modules/koffi/**/*",
+      "node_modules/keysender/**/*"
     ],
     "win": {
       "target": [
