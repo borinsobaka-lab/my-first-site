@@ -8,21 +8,25 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-// Store the handle of the last foreground window (as a BigInt for 64-bit handles)
-let lastForegroundWindow: bigint | null = null;
+// Store the handle of the last foreground window
+let lastForegroundWindow: string | null = null;
 
 // koffi bindings
 let koffiLoaded = false;
 let koffiLoadAttempted = false;
-let GetForegroundWindow: (() => bigint) | null = null;
-let SetForegroundWindow: ((hwnd: bigint) => number) | null = null;
-let ShowWindow: ((hwnd: bigint, cmd: number) => number) | null = null;
-let keybd_event: ((vk: number, scan: number, flags: number, extra: number) => void) | null = null;
-let GetWindowThreadProcessId: ((hwnd: bigint, pid: number[]) => number) | null = null;
-let GetCurrentThreadId: (() => number) | null = null;
-let AttachThreadInput: ((idAttach: number, idAttachTo: number, attach: number) => number) | null = null;
-let BringWindowToTop: ((hwnd: bigint) => number) | null = null;
-let SetFocus: ((hwnd: bigint) => bigint) | null = null;
+let koffi: any = null;
+let user32: any = null;
+let kernel32: any = null;
+
+// Function references
+let GetForegroundWindow: any = null;
+let SetForegroundWindow: any = null;
+let ShowWindow: any = null;
+let keybd_event: any = null;
+let GetWindowThreadProcessId: any = null;
+let GetCurrentThreadId: any = null;
+let AttachThreadInput: any = null;
+let BringWindowToTop: any = null;
 
 const SW_RESTORE = 9;
 const SW_SHOW = 5;
@@ -46,23 +50,35 @@ async function loadKoffi(): Promise<boolean> {
 
   try {
     console.log('Loading koffi...');
-    const koffi = await import('koffi');
 
-    const user32 = koffi.load('user32.dll');
-    const kernel32 = koffi.load('kernel32.dll');
+    // Try require instead of dynamic import
+    try {
+      koffi = require('koffi');
+    } catch (e) {
+      // Try dynamic import as fallback
+      const module = await import('koffi');
+      koffi = module.default || module;
+    }
 
-    // Bind functions with proper types
-    GetForegroundWindow = user32.func('long long GetForegroundWindow()');
-    SetForegroundWindow = user32.func('int SetForegroundWindow(long long hwnd)');
-    ShowWindow = user32.func('int ShowWindow(long long hwnd, int nCmdShow)');
-    BringWindowToTop = user32.func('int BringWindowToTop(long long hwnd)');
-    SetFocus = user32.func('long long SetFocus(long long hwnd)');
-    GetWindowThreadProcessId = user32.func('int GetWindowThreadProcessId(long long hwnd, int* lpdwProcessId)');
-    GetCurrentThreadId = kernel32.func('int GetCurrentThreadId()');
-    AttachThreadInput = user32.func('int AttachThreadInput(int idAttach, int idAttachTo, int fAttach)');
+    if (!koffi || typeof koffi.load !== 'function') {
+      console.error('koffi module loaded but .load is not a function');
+      console.log('koffi type:', typeof koffi);
+      console.log('koffi keys:', koffi ? Object.keys(koffi) : 'null');
+      return false;
+    }
 
-    // keybd_event for sending keystrokes
-    keybd_event = user32.func('void keybd_event(uint8 bVk, uint8 bScan, int dwFlags, int dwExtraInfo)');
+    user32 = koffi.load('user32.dll');
+    kernel32 = koffi.load('kernel32.dll');
+
+    // Bind functions - use IntPtr as pointer type for handles
+    GetForegroundWindow = user32.func('intptr GetForegroundWindow()');
+    SetForegroundWindow = user32.func('int SetForegroundWindow(intptr hwnd)');
+    ShowWindow = user32.func('int ShowWindow(intptr hwnd, int nCmdShow)');
+    BringWindowToTop = user32.func('int BringWindowToTop(intptr hwnd)');
+    GetWindowThreadProcessId = user32.func('uint32 GetWindowThreadProcessId(intptr hwnd, uint32* lpdwProcessId)');
+    GetCurrentThreadId = kernel32.func('uint32 GetCurrentThreadId()');
+    AttachThreadInput = user32.func('int AttachThreadInput(uint32 idAttach, uint32 idAttachTo, int fAttach)');
+    keybd_event = user32.func('void keybd_event(uint8 bVk, uint8 bScan, uint32 dwFlags, uintptr dwExtraInfo)');
 
     koffiLoaded = true;
     console.log('koffi loaded successfully!');
@@ -75,6 +91,42 @@ async function loadKoffi(): Promise<boolean> {
 }
 
 /**
+ * Capture the current foreground window handle using PowerShell
+ */
+async function captureWithPowerShell(): Promise<string | null> {
+  try {
+    // Simpler PowerShell command that works on all Windows versions
+    const psCommand = `
+$code = @'
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+}
+'@
+Add-Type -TypeDefinition $code -Language CSharp
+[Win32]::GetForegroundWindow().ToInt64()
+`.trim().replace(/\n/g, ' ');
+
+    const { stdout } = await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`,
+      { windowsHide: true, timeout: 5000 }
+    );
+
+    const hwnd = stdout.trim();
+    if (hwnd && hwnd !== '0') {
+      console.log('Captured foreground window (PowerShell):', hwnd);
+      return hwnd;
+    }
+    return null;
+  } catch (error) {
+    console.error('PowerShell GetForegroundWindow failed:', error);
+    return null;
+  }
+}
+
+/**
  * Capture the current foreground window handle
  * Call this BEFORE recording starts
  */
@@ -82,28 +134,74 @@ export async function captureCurrentWindow(): Promise<boolean> {
   if (process.platform !== 'win32') return false;
 
   try {
+    // Try koffi first
     await loadKoffi();
 
     if (koffiLoaded && GetForegroundWindow) {
-      const hwnd = GetForegroundWindow();
-      lastForegroundWindow = hwnd;
-      console.log('Captured foreground window (koffi):', hwnd.toString());
-      return hwnd !== 0n;
+      try {
+        const hwnd = GetForegroundWindow();
+        if (hwnd) {
+          lastForegroundWindow = hwnd.toString();
+          console.log('Captured foreground window (koffi):', lastForegroundWindow);
+          return true;
+        }
+      } catch (e) {
+        console.error('koffi GetForegroundWindow failed:', e);
+      }
     }
 
-    // Fallback: use PowerShell to get foreground window
-    console.log('koffi not available, using PowerShell to get foreground window...');
-    const { stdout } = await execAsync(
-      `powershell -NoProfile -Command "[System.IntPtr]::new((Add-Type -MemberDefinition '[DllImport(\\\"user32.dll\\\")]public static extern IntPtr GetForegroundWindow();' -Name W -PassThru)::GetForegroundWindow()).ToInt64()"`,
-      { windowsHide: true, timeout: 3000 }
-    );
+    // Fallback to PowerShell
+    console.log('Trying PowerShell to capture foreground window...');
+    const hwnd = await captureWithPowerShell();
+    if (hwnd) {
+      lastForegroundWindow = hwnd;
+      return true;
+    }
 
-    const hwnd = BigInt(stdout.trim());
-    lastForegroundWindow = hwnd;
-    console.log('Captured foreground window (PowerShell):', hwnd.toString());
-    return hwnd !== 0n;
+    console.error('All methods to capture foreground window failed');
+    return false;
   } catch (error) {
     console.error('Failed to capture foreground window:', error);
+    return false;
+  }
+}
+
+/**
+ * Restore focus to the previously captured window using PowerShell
+ */
+async function restoreWithPowerShell(): Promise<boolean> {
+  if (!lastForegroundWindow) return false;
+
+  try {
+    const psCommand = `
+$code = @'
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
+}
+'@
+Add-Type -TypeDefinition $code -Language CSharp
+$hwnd = [IntPtr]::new(${lastForegroundWindow})
+[Win32]::ShowWindow($hwnd, 9)
+[Win32]::BringWindowToTop($hwnd)
+[Win32]::SetForegroundWindow($hwnd)
+`.trim().replace(/\n/g, ' ');
+
+    await execAsync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`,
+      { windowsHide: true, timeout: 5000 }
+    );
+
+    console.log('Focus restored via PowerShell');
+    return true;
+  } catch (error) {
+    console.error('PowerShell SetForegroundWindow failed:', error);
     return false;
   }
 }
@@ -113,59 +211,53 @@ export async function captureCurrentWindow(): Promise<boolean> {
  */
 export async function restoreFocusToWindow(): Promise<boolean> {
   if (process.platform !== 'win32') return false;
-  if (!lastForegroundWindow || lastForegroundWindow === 0n) {
+  if (!lastForegroundWindow) {
     console.log('No captured window to restore');
     return false;
   }
 
-  console.log('Restoring focus to window:', lastForegroundWindow.toString());
+  console.log('Restoring focus to window:', lastForegroundWindow);
 
   try {
     await loadKoffi();
 
     if (koffiLoaded && SetForegroundWindow && ShowWindow && GetWindowThreadProcessId && GetCurrentThreadId && AttachThreadInput) {
-      // Get thread IDs
-      const currentThreadId = GetCurrentThreadId();
-      const pidBuffer = [0];
-      const targetThreadId = GetWindowThreadProcessId(lastForegroundWindow, pidBuffer);
+      try {
+        const hwnd = BigInt(lastForegroundWindow);
 
-      console.log(`Current thread: ${currentThreadId}, Target thread: ${targetThreadId}`);
+        // Get thread IDs
+        const currentThreadId = GetCurrentThreadId();
+        const pidBuffer = [0];
+        const targetThreadId = GetWindowThreadProcessId(hwnd, pidBuffer);
 
-      // Attach to target thread
-      if (targetThreadId !== currentThreadId && targetThreadId !== 0) {
-        AttachThreadInput(currentThreadId, targetThreadId, 1);
+        console.log(`Current thread: ${currentThreadId}, Target thread: ${targetThreadId}`);
+
+        // Attach to target thread
+        if (targetThreadId !== currentThreadId && targetThreadId !== 0) {
+          AttachThreadInput(currentThreadId, targetThreadId, 1);
+        }
+
+        // Restore and show window
+        ShowWindow(hwnd, SW_RESTORE);
+        ShowWindow(hwnd, SW_SHOW);
+        if (BringWindowToTop) BringWindowToTop(hwnd);
+        const result = SetForegroundWindow(hwnd);
+
+        // Detach from target thread
+        if (targetThreadId !== currentThreadId && targetThreadId !== 0) {
+          AttachThreadInput(currentThreadId, targetThreadId, 0);
+        }
+
+        console.log('SetForegroundWindow result:', result);
+        return result !== 0;
+      } catch (e) {
+        console.error('koffi focus restore failed:', e);
       }
-
-      // Restore and show window
-      ShowWindow(lastForegroundWindow, SW_RESTORE);
-      ShowWindow(lastForegroundWindow, SW_SHOW);
-
-      // Bring to top and set foreground
-      if (BringWindowToTop) BringWindowToTop(lastForegroundWindow);
-      const result = SetForegroundWindow(lastForegroundWindow);
-
-      // Try SetFocus
-      if (SetFocus) {
-        try { SetFocus(lastForegroundWindow); } catch {}
-      }
-
-      // Detach from target thread
-      if (targetThreadId !== currentThreadId && targetThreadId !== 0) {
-        AttachThreadInput(currentThreadId, targetThreadId, 0);
-      }
-
-      console.log('SetForegroundWindow result:', result);
-      return result !== 0;
     }
 
-    // Fallback: use PowerShell to set foreground window
-    console.log('koffi not available, using PowerShell to restore focus...');
-    await execAsync(
-      `powershell -NoProfile -Command "Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class W{[DllImport(\\\"user32.dll\\\")]public static extern bool SetForegroundWindow(IntPtr h);[DllImport(\\\"user32.dll\\\")]public static extern bool ShowWindow(IntPtr h,int c);}'; [W]::ShowWindow([IntPtr]::new(${lastForegroundWindow.toString()}),9); [W]::SetForegroundWindow([IntPtr]::new(${lastForegroundWindow.toString()}))"`,
-      { windowsHide: true, timeout: 3000 }
-    );
-    console.log('Focus restored via PowerShell');
-    return true;
+    // Fallback to PowerShell
+    console.log('Trying PowerShell to restore focus...');
+    return await restoreWithPowerShell();
   } catch (error) {
     console.error('Failed to restore focus:', error);
     return false;
@@ -209,7 +301,7 @@ export async function sendCtrlV(): Promise<boolean> {
  * Check if we have a captured window
  */
 export function hasCapturedWindow(): boolean {
-  return lastForegroundWindow !== null && lastForegroundWindow !== 0n;
+  return lastForegroundWindow !== null && lastForegroundWindow !== '0';
 }
 
 /**
@@ -223,5 +315,5 @@ export function clearCapturedWindow(): void {
  * Get captured window handle as string (for debugging)
  */
 export function getCapturedWindowInfo(): string {
-  return lastForegroundWindow ? lastForegroundWindow.toString() : 'none';
+  return lastForegroundWindow || 'none';
 }
