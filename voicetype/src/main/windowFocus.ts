@@ -173,6 +173,7 @@ async function restoreWithPowerShell(): Promise<boolean> {
   if (!lastForegroundWindow) return false;
 
   try {
+    // Only call SetForegroundWindow - don't change window state (keeps fullscreen intact)
     const psCommand = `
 $code = @'
 using System;
@@ -180,16 +181,10 @@ using System.Runtime.InteropServices;
 public class Win32 {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
 }
 '@
 Add-Type -TypeDefinition $code -Language CSharp
 $hwnd = [IntPtr]::new(${lastForegroundWindow})
-[Win32]::ShowWindow($hwnd, 9)
-[Win32]::BringWindowToTop($hwnd)
 [Win32]::SetForegroundWindow($hwnd)
 `.trim().replace(/\n/g, ' ');
 
@@ -221,7 +216,7 @@ export async function restoreFocusToWindow(): Promise<boolean> {
   try {
     await loadKoffi();
 
-    if (koffiLoaded && SetForegroundWindow && ShowWindow && GetWindowThreadProcessId && GetCurrentThreadId && AttachThreadInput) {
+    if (koffiLoaded && SetForegroundWindow && GetWindowThreadProcessId && GetCurrentThreadId && AttachThreadInput) {
       try {
         const hwnd = BigInt(lastForegroundWindow);
 
@@ -232,15 +227,12 @@ export async function restoreFocusToWindow(): Promise<boolean> {
 
         console.log(`Current thread: ${currentThreadId}, Target thread: ${targetThreadId}`);
 
-        // Attach to target thread
+        // Attach to target thread to bypass foreground lock
         if (targetThreadId !== currentThreadId && targetThreadId !== 0) {
           AttachThreadInput(currentThreadId, targetThreadId, 1);
         }
 
-        // Restore and show window
-        ShowWindow(hwnd, SW_RESTORE);
-        ShowWindow(hwnd, SW_SHOW);
-        if (BringWindowToTop) BringWindowToTop(hwnd);
+        // Just set foreground - don't change window state (keeps fullscreen intact)
         const result = SetForegroundWindow(hwnd);
 
         // Detach from target thread
