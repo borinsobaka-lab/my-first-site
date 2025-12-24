@@ -72,17 +72,22 @@ function handleHotkeyPress(): void {
 /**
  * Start recording
  */
-async function startRecording(): Promise<void> {
+function startRecording(): void {
   if (!mainWindowRef || isRecording) return;
 
-  // IMPORTANT: Capture the foreground window BEFORE we do anything else
+  // IMPORTANT: Capture the foreground window synchronously BEFORE we do anything else
   // This is the window where the user wants to paste the text
   const insertMode = settingsManager.get('insertMode');
   if (insertMode === 'type') {
-    const captured = await captureCurrentWindow();
-    console.log('Foreground window captured:', captured);
+    // Don't await - capture happens synchronously in the native call
+    captureCurrentWindow().then(captured => {
+      console.log('Foreground window captured:', captured);
+    }).catch(err => {
+      console.error('Failed to capture window:', err);
+    });
   }
 
+  // Start recording immediately without waiting for window capture
   isRecording = true;
   sendRecordingStart(mainWindowRef);
   console.log('Recording started via hotkey');

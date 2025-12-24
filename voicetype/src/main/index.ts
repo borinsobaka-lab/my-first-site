@@ -3,8 +3,10 @@ import * as path from 'path';
 import { setupIPC } from './ipc';
 import { registerHotkey, unregisterAllShortcuts, setupRecordingStateSync } from './shortcuts';
 import { createTray, destroyTray, updateTrayState } from './tray';
+import { createOverlayWindow, updateOverlayState, destroyOverlay } from './overlay';
 import { IPC_CHANNELS, RecordingState } from '../../shared/types';
 import settingsManager from './settings';
+import { initializeWindowFocus } from './windowFocus';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -67,9 +69,14 @@ function createWindow(): void {
   // Create system tray
   createTray(mainWindow);
 
+  // Create overlay window (hidden by default)
+  createOverlayWindow();
+
   // Handle tray state updates from renderer
   ipcMain.on(IPC_CHANNELS.TRAY_UPDATE_STATE, (_event, state: RecordingState) => {
     updateTrayState(state);
+    // Also update the overlay
+    updateOverlayState(state);
   });
 }
 
@@ -85,6 +92,9 @@ function setupAutoLaunch(): void {
 
 // App lifecycle
 app.whenReady().then(() => {
+  // Pre-load koffi for Windows API access (reduces hotkey delay)
+  initializeWindowFocus();
+
   createWindow();
   setupAutoLaunch();
 
@@ -113,6 +123,7 @@ app.on('will-quit', () => {
   // Cleanup
   unregisterAllShortcuts();
   destroyTray();
+  destroyOverlay();
 });
 
 // Handle certificate errors in development

@@ -4,6 +4,7 @@ import settingsManager from './settings';
 import { insertText } from './textInput';
 import { updateHotkey } from './shortcuts';
 import { getLogs, clearLogs, logInfo, logError, logSuccess, setLoggerWindow } from './logger';
+import { showOverlayError } from './overlay';
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -70,6 +71,8 @@ export function setupIPC(mainWindow: BrowserWindow): void {
   // Handle transcription error
   ipcMain.on(IPC_CHANNELS.TRANSCRIPTION_ERROR, (_event, data: { error: string }) => {
     logError('Ошибка транскрибации', data.error);
+    // Show error on overlay
+    showOverlayError(data.error);
   });
 
   // Handle logs get request

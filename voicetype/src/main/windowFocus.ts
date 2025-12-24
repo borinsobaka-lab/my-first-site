@@ -35,6 +35,17 @@ const VK_V = 0x56;
 const KEYEVENTF_KEYUP = 0x0002;
 
 /**
+ * Initialize koffi at app startup (call this early)
+ */
+export function initializeWindowFocus(): void {
+  if (process.platform === 'win32') {
+    loadKoffi().catch(err => {
+      console.error('Failed to pre-load koffi:', err);
+    });
+  }
+}
+
+/**
  * Load koffi and Windows API bindings
  */
 async function loadKoffi(): Promise<boolean> {

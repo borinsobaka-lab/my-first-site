@@ -33,6 +33,17 @@ export default defineConfig({
           },
         },
       },
+      {
+        entry: 'src/preload/overlay.ts',
+        onstart(options) {
+          options.reload();
+        },
+        vite: {
+          build: {
+            outDir: 'dist/preload',
+          },
+        },
+      },
     ]),
     renderer(),
   ],
