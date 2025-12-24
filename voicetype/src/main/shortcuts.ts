@@ -2,6 +2,7 @@ import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
 import { sendRecordingStart, sendRecordingStop } from './ipc';
 import settingsManager from './settings';
 import { IPC_CHANNELS } from '../../shared/types';
+import { captureCurrentWindow, clearCapturedWindow } from './windowFocus';
 
 let isRecording = false;
 let currentHotkey: string | null = null;
@@ -71,8 +72,16 @@ function handleHotkeyPress(): void {
 /**
  * Start recording
  */
-function startRecording(): void {
+async function startRecording(): Promise<void> {
   if (!mainWindowRef || isRecording) return;
+
+  // IMPORTANT: Capture the foreground window BEFORE we do anything else
+  // This is the window where the user wants to paste the text
+  const insertMode = settingsManager.get('insertMode');
+  if (insertMode === 'type') {
+    const captured = await captureCurrentWindow();
+    console.log('Foreground window captured:', captured);
+  }
 
   isRecording = true;
   sendRecordingStart(mainWindowRef);

@@ -1,9 +1,10 @@
 import { clipboard } from 'electron';
-import { exec, spawn } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { restoreFocusToWindow, sendCtrlV, hasCapturedWindow, clearCapturedWindow } from './windowFocus';
 
 const execAsync = promisify(exec);
 
@@ -144,38 +145,55 @@ async function copyAndPaste(text: string): Promise<void> {
   clipboard.writeText(text);
   console.log('Text copied to clipboard for auto-paste');
 
-  // Wait for the target window to have focus (window should already be hidden by ipc.ts)
-  await delay(100);
-
-  // Try platform-specific paste methods
   const platform = process.platform;
   let pasted = false;
 
   if (platform === 'win32') {
-    // On Windows, try multiple methods in order of reliability
+    // On Windows, use our window focus tracking for reliable paste
 
-    // Method 1: Windows API via koffi (most direct, no subprocess)
-    await loadKoffi();
-    if (koffiLoaded) {
-      pasted = await pasteWithWindowsAPI();
+    // First, restore focus to the window that was active when recording started
+    if (hasCapturedWindow()) {
+      console.log('Restoring focus to captured window...');
+      const focusRestored = await restoreFocusToWindow();
+      console.log('Focus restored:', focusRestored);
+
+      // Give Windows time to process the focus change
+      await delay(150);
+
+      // Use our keybd_event based Ctrl+V (most reliable)
+      pasted = await sendCtrlV();
+
+      // Clear the captured window after we're done
+      clearCapturedWindow();
     }
 
-    // Method 2: VBScript via mshta (fast, inline)
+    // If that didn't work, try other methods
+    if (!pasted) {
+      console.log('Primary paste method failed, trying alternatives...');
+
+      // Method 2: Windows API SendInput
+      await loadKoffi();
+      if (koffiLoaded) {
+        pasted = await pasteWithWindowsAPI();
+      }
+    }
+
+    // Method 3: VBScript via mshta (fast, inline)
     if (!pasted) {
       pasted = await pasteWithMshta();
     }
 
-    // Method 3: VBScript via cscript (temp file)
+    // Method 4: VBScript via cscript (temp file)
     if (!pasted) {
       pasted = await pasteWithVBScript();
     }
 
-    // Method 4: PowerShell with WScript.Shell COM
+    // Method 5: PowerShell with WScript.Shell COM
     if (!pasted) {
       pasted = await pasteWithPowerShellWScript();
     }
 
-    // Method 5: Original PowerShell method
+    // Method 6: Original PowerShell method
     if (!pasted) {
       pasted = await pasteWithPowerShell();
     }

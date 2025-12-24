@@ -35,39 +35,21 @@ export function setupIPC(mainWindow: BrowserWindow): void {
 
     console.log(`Inserting text: ${textLength} characters, mode: ${insertMode}`);
 
-    // For auto-paste mode, we need to blur/hide VoiceType window first
-    // so that focus returns to the previous window
+    // For auto-paste mode, hide VoiceType window to not interfere
+    // The focus restoration to the target window is handled by textInput.ts
+    // using the captured window handle from when recording started
     if (insertMode === 'type' && mainWindowRef) {
-      // Hide the window temporarily to return focus to previous app
       const wasVisible = mainWindowRef.isVisible();
       if (wasVisible) {
-        console.log('Hiding VoiceType window to return focus to target app');
-
-        // First blur to release focus
-        mainWindowRef.blur();
-
-        // Then hide the window
+        console.log('Hiding VoiceType window before paste');
         mainWindowRef.hide();
-
-        // Wait for OS to switch focus back to previous window
-        // Longer delay to ensure focus is properly restored
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        console.log('Window hidden, focus should be on previous app');
+        // Small delay to ensure window is hidden
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
-
-      await insertText(data.text, insertMode);
-      console.log('Text insertion completed');
-
-      // Show window again after paste (optional - user might not want this)
-      // For now, keep it hidden - user can access via tray
-      // if (wasVisible) {
-      //   mainWindowRef.show();
-      // }
-    } else {
-      await insertText(data.text, insertMode);
-      console.log('Text copied to clipboard (clipboard mode)');
     }
+
+    await insertText(data.text, insertMode);
+    console.log(insertMode === 'type' ? 'Text insertion completed' : 'Text copied to clipboard');
 
     return { success: true };
   });
