@@ -97,7 +97,13 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
         const sizeKB = (blob.size / 1024).toFixed(1);
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(2);
-        console.log(`Recording stopped: ${chunksRef.current.length} chunks, ${sizeKB} KB (${sizeMB} MB)`);
+        console.log(`Recording stopped: ${chunksRef.current.length} chunks, ${sizeKB} KB (${sizeMB} MB), mimeType: "${mimeType}"`);
+
+        // Warn if recording seems too small
+        if (blob.size < 1000) {
+          console.warn(`Warning: Recording is very small (${sizeKB} KB), might be corrupt`);
+        }
+
         resolve(blob);
       };
 

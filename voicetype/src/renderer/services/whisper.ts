@@ -20,22 +20,37 @@ export async function transcribe(
   }
 
   // Log audio info for debugging
+  const fileSizeKB = (audioBlob.size / 1024).toFixed(1);
   const fileSizeMB = (audioBlob.size / (1024 * 1024)).toFixed(2);
-  console.log(`Transcribing audio: ${fileSizeMB} MB, type: ${audioBlob.type}`);
+  console.log(`Transcribing audio: ${fileSizeKB} KB (${fileSizeMB} MB), type: "${audioBlob.type}"`);
+
+  // Check minimum file size (too small = likely corrupt or empty recording)
+  // Typical speech is ~100KB+ for 1 second at reasonable quality
+  if (audioBlob.size < 1000) {
+    throw new Error(`Аудио слишком короткое или повреждено (${fileSizeKB} KB). Попробуйте записать дольше.`);
+  }
 
   // Check file size limit (Whisper API limit is 25MB)
   if (audioBlob.size > 25 * 1024 * 1024) {
     throw new Error('Аудиофайл слишком большой (макс. 25 МБ)');
   }
 
+  // Validate MIME type
+  const mimeType = audioBlob.type || 'audio/webm';
+  if (!mimeType.startsWith('audio/')) {
+    throw new Error(`Неверный формат аудио: ${mimeType}`);
+  }
+
   // Prepare form data
   const formData = new FormData();
 
   // Convert blob to file with proper extension
-  const extension = getExtensionFromMimeType(audioBlob.type);
+  const extension = getExtensionFromMimeType(mimeType);
   const file = new File([audioBlob], `recording.${extension}`, {
-    type: audioBlob.type,
+    type: mimeType,
   });
+
+  console.log(`Created file: recording.${extension}, size: ${file.size}, type: ${file.type}`);
 
   formData.append('file', file);
   formData.append('model', 'whisper-1');
