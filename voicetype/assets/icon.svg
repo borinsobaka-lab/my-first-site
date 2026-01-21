@@ -1,0 +1,40 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0369a1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg-gradient)"/>
+
+  <!-- Microphone icon -->
+  <g transform="translate(128, 96)">
+    <!-- Mic body -->
+    <rect x="80" y="0" width="96" height="192" rx="48" fill="white"/>
+
+    <!-- Mic stand arc -->
+    <path d="M48 160 C48 240, 128 280, 128 280 C128 280, 208 240, 208 160"
+          stroke="white"
+          stroke-width="24"
+          fill="none"
+          stroke-linecap="round"/>
+
+    <!-- Mic stand line -->
+    <line x1="128" y1="280" x2="128" y2="340"
+          stroke="white"
+          stroke-width="24"
+          stroke-linecap="round"/>
+
+    <!-- Mic stand base -->
+    <line x1="64" y1="340" x2="192" y2="340"
+          stroke="white"
+          stroke-width="24"
+          stroke-linecap="round"/>
+  </g>
+
+  <!-- Sound waves -->
+  <circle cx="256" cy="224" r="180" stroke="white" stroke-opacity="0.2" stroke-width="16" fill="none"/>
+  <circle cx="256" cy="224" r="220" stroke="white" stroke-opacity="0.1" stroke-width="12" fill="none"/>
+</svg>
