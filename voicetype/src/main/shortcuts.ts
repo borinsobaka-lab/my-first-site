@@ -1,11 +1,13 @@
 import { globalShortcut, BrowserWindow, ipcMain } from 'electron';
 import { sendRecordingStart, sendRecordingStop } from './ipc';
 import settingsManager from './settings';
-import { IPC_CHANNELS } from '../../shared/types';
-import { captureCurrentWindow, clearCapturedWindow } from './windowFocus';
+import { RecordingMode } from '../../shared/types';
+import { captureCurrentWindow } from './windowFocus';
 
 let isRecording = false;
+let currentMode: RecordingMode | null = null;
 let currentHotkey: string | null = null;
+let currentAiHotkey: string | null = null;
 let mainWindowRef: BrowserWindow | null = null;
 
 /**
@@ -19,10 +21,21 @@ function parseHotkey(hotkey: string): string {
 }
 
 /**
- * Register global hotkey for voice recording
+ * Register both global hotkeys for voice recording
  */
-export function registerHotkey(window: BrowserWindow): boolean {
+export function registerHotkeys(window: BrowserWindow): boolean {
   mainWindowRef = window;
+
+  const dictationResult = registerDictationHotkey();
+  const aiResult = registerAiHotkey();
+
+  return dictationResult || aiResult; // At least one should work
+}
+
+/**
+ * Register dictation hotkey
+ */
+function registerDictationHotkey(): boolean {
   const hotkey = settingsManager.get('hotkey');
 
   // Unregister existing hotkey if any
@@ -38,41 +51,90 @@ export function registerHotkey(window: BrowserWindow): boolean {
 
   try {
     const registered = globalShortcut.register(accelerator, () => {
-      handleHotkeyPress();
+      handleHotkeyPress('dictation');
     });
 
     if (registered) {
       currentHotkey = hotkey;
-      console.log(`Hotkey registered: ${accelerator}`);
+      console.log(`Dictation hotkey registered: ${accelerator}`);
       return true;
     } else {
-      console.error(`Failed to register hotkey: ${accelerator}`);
+      console.error(`Failed to register dictation hotkey: ${accelerator}`);
       return false;
     }
   } catch (error) {
-    console.error('Error registering hotkey:', error);
+    console.error('Error registering dictation hotkey:', error);
+    return false;
+  }
+}
+
+/**
+ * Register AI generation hotkey
+ */
+function registerAiHotkey(): boolean {
+  const aiHotkey = settingsManager.get('aiHotkey');
+
+  // Unregister existing AI hotkey if any
+  if (currentAiHotkey) {
+    try {
+      globalShortcut.unregister(parseHotkey(currentAiHotkey));
+    } catch {
+      // Ignore errors when unregistering
+    }
+  }
+
+  const accelerator = parseHotkey(aiHotkey);
+
+  try {
+    const registered = globalShortcut.register(accelerator, () => {
+      handleHotkeyPress('ai-generation');
+    });
+
+    if (registered) {
+      currentAiHotkey = aiHotkey;
+      console.log(`AI generation hotkey registered: ${accelerator}`);
+      return true;
+    } else {
+      console.error(`Failed to register AI hotkey: ${accelerator}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error registering AI hotkey:', error);
     return false;
   }
 }
 
 /**
  * Handle hotkey press - toggle recording
+ * @param mode - Which mode was triggered
  */
-function handleHotkeyPress(): void {
+function handleHotkeyPress(mode: RecordingMode): void {
   if (!mainWindowRef) return;
 
-  // Toggle recording state
-  if (isRecording) {
+  // If already recording in the same mode, stop
+  if (isRecording && currentMode === mode) {
     stopRecording();
-  } else {
-    startRecording();
+    return;
   }
+
+  // If recording in different mode, stop first then start new
+  if (isRecording && currentMode !== mode) {
+    stopRecording();
+    // Small delay before starting new mode
+    setTimeout(() => {
+      startRecording(mode);
+    }, 100);
+    return;
+  }
+
+  // Start recording in the requested mode
+  startRecording(mode);
 }
 
 /**
- * Start recording
+ * Start recording in specified mode
  */
-function startRecording(): void {
+function startRecording(mode: RecordingMode): void {
   if (!mainWindowRef || isRecording) return;
 
   // IMPORTANT: Capture the foreground window synchronously BEFORE we do anything else
@@ -89,8 +151,9 @@ function startRecording(): void {
 
   // Start recording immediately without waiting for window capture
   isRecording = true;
-  sendRecordingStart(mainWindowRef);
-  console.log('Recording started via hotkey');
+  currentMode = mode;
+  sendRecordingStart(mainWindowRef, mode);
+  console.log(`Recording started via hotkey (mode: ${mode})`);
 }
 
 /**
@@ -101,7 +164,8 @@ function stopRecording(): void {
 
   isRecording = false;
   sendRecordingStop(mainWindowRef);
-  console.log('Recording stopped via hotkey');
+  console.log(`Recording stopped via hotkey (mode: ${currentMode})`);
+  // Don't reset currentMode here - renderer needs it
 }
 
 /**
@@ -111,6 +175,9 @@ export function setupRecordingStateSync(): void {
   // Sync recording state from renderer
   ipcMain.on('recording:state-sync', (_event, recording: boolean) => {
     isRecording = recording;
+    if (!recording) {
+      currentMode = null;
+    }
     console.log('Recording state synced from renderer:', recording);
   });
 }
@@ -123,21 +190,33 @@ export function getRecordingState(): boolean {
 }
 
 /**
+ * Get current recording mode
+ */
+export function getCurrentMode(): RecordingMode | null {
+  return currentMode;
+}
+
+/**
  * Reset recording state (called when recording ends in renderer)
  */
 export function resetRecordingState(): void {
   isRecording = false;
+  currentMode = null;
 }
 
 /**
- * Update hotkey (called when settings change)
+ * Update hotkeys (called when settings change)
  */
-export function updateHotkey(): boolean {
+export function updateHotkeys(): boolean {
   if (mainWindowRef) {
-    return registerHotkey(mainWindowRef);
+    return registerHotkeys(mainWindowRef);
   }
   return false;
 }
+
+// Backwards compatibility
+export const registerHotkey = registerHotkeys;
+export const updateHotkey = updateHotkeys;
 
 /**
  * Unregister all global shortcuts
@@ -145,6 +224,8 @@ export function updateHotkey(): boolean {
 export function unregisterAllShortcuts(): void {
   globalShortcut.unregisterAll();
   currentHotkey = null;
+  currentAiHotkey = null;
   isRecording = false;
+  currentMode = null;
   console.log('All shortcuts unregistered');
 }

@@ -5,11 +5,12 @@
 
 import { BrowserWindow, screen, ipcMain } from 'electron';
 import * as path from 'path';
-import { RecordingState, IPC_CHANNELS } from '../../shared/types';
+import { RecordingState, RecordingMode, IPC_CHANNELS } from '../../shared/types';
 import settingsManager from './settings';
 
 let overlayWindow: BrowserWindow | null = null;
 let currentState: RecordingState = 'idle';
+let currentMode: RecordingMode = 'dictation';
 let hideTimeout: NodeJS.Timeout | null = null;
 
 const isDev = process.env.NODE_ENV === 'development' || !process.env.npm_package_version;
@@ -66,16 +67,21 @@ export function createOverlayWindow(): void {
  */
 function setupOverlayIPC(): void {
   ipcMain.handle('overlay:get-state', () => {
-    const hotkey = settingsManager.get('hotkey');
-    return { state: currentState, hotkey };
+    const hotkey = currentMode === 'ai-generation'
+      ? settingsManager.get('aiHotkey')
+      : settingsManager.get('hotkey');
+    return { state: currentState, mode: currentMode, hotkey };
   });
 }
 
 /**
  * Update overlay state
  */
-export function updateOverlayState(state: RecordingState): void {
+export function updateOverlayState(state: RecordingState, mode?: RecordingMode): void {
   currentState = state;
+  if (mode) {
+    currentMode = mode;
+  }
 
   // Clear any pending hide timeout
   if (hideTimeout) {
@@ -90,9 +96,12 @@ export function updateOverlayState(state: RecordingState): void {
   if (!overlayWindow) return;
 
   // Show overlay for recording, processing, error states
-  if (state === 'recording' || state === 'processing' || state === 'error') {
-    const hotkey = settingsManager.get('hotkey');
-    overlayWindow.webContents.send('overlay:state-changed', { state, hotkey });
+  const showStates: RecordingState[] = ['recording', 'processing', 'ai-recording', 'ai-processing', 'error'];
+  if (showStates.includes(state)) {
+    const hotkey = currentMode === 'ai-generation'
+      ? settingsManager.get('aiHotkey')
+      : settingsManager.get('hotkey');
+    overlayWindow.webContents.send('overlay:state-changed', { state, mode: currentMode, hotkey });
     overlayWindow.showInactive();
   } else if (state === 'idle') {
     // Hide overlay when idle (after successful insert or cancel)

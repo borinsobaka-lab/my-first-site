@@ -1,8 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron';
-import { IPC_CHANNELS, AppSettings, RecordingState } from '../../shared/types';
+import { IPC_CHANNELS, AppSettings, RecordingState, RecordingMode } from '../../shared/types';
 import settingsManager from './settings';
 import { insertText } from './textInput';
-import { updateHotkey } from './shortcuts';
+import { updateHotkeys } from './shortcuts';
 import { getLogs, clearLogs, logInfo, logError, logSuccess, setLoggerWindow } from './logger';
 import { showOverlayError } from './overlay';
 
@@ -20,12 +20,14 @@ export function setupIPC(mainWindow: BrowserWindow): void {
   // Handle settings set request
   ipcMain.handle(IPC_CHANNELS.SETTINGS_SET, (_event, settings: Partial<AppSettings>) => {
     const oldHotkey = settingsManager.get('hotkey');
+    const oldAiHotkey = settingsManager.get('aiHotkey');
     settingsManager.setMultiple(settings);
 
-    // Re-register hotkey if it was changed
-    if (settings.hotkey && settings.hotkey !== oldHotkey) {
-      console.log('Hotkey changed, re-registering:', settings.hotkey);
-      updateHotkey();
+    // Re-register hotkeys if any was changed
+    if ((settings.hotkey && settings.hotkey !== oldHotkey) ||
+        (settings.aiHotkey && settings.aiHotkey !== oldAiHotkey)) {
+      console.log('Hotkey changed, re-registering');
+      updateHotkeys();
     }
 
     return settingsManager.getAll();
@@ -87,9 +89,9 @@ export function setupIPC(mainWindow: BrowserWindow): void {
   });
 }
 
-// Send recording start signal to renderer
-export function sendRecordingStart(window: BrowserWindow): void {
-  window.webContents.send(IPC_CHANNELS.RECORDING_START);
+// Send recording start signal to renderer with mode
+export function sendRecordingStart(window: BrowserWindow, mode: RecordingMode): void {
+  window.webContents.send(IPC_CHANNELS.RECORDING_START, { mode });
 }
 
 // Send recording stop signal to renderer

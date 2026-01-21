@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { AppSettings, RecordingState, LogEntry, IPC_CHANNELS } from '../../shared/types';
+import { AppSettings, RecordingState, RecordingMode, LogEntry, IPC_CHANNELS } from '../../shared/types';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -33,13 +33,15 @@ const electronAPI = {
   },
 
   // Tray updates
-  updateTrayState: (state: RecordingState): void => {
-    ipcRenderer.send(IPC_CHANNELS.TRAY_UPDATE_STATE, state);
+  updateTrayState: (state: RecordingState, mode?: RecordingMode): void => {
+    ipcRenderer.send(IPC_CHANNELS.TRAY_UPDATE_STATE, { state, mode });
   },
 
   // Event listeners
-  onRecordingStart: (callback: () => void): (() => void) => {
-    const subscription = () => callback();
+  onRecordingStart: (callback: (mode: RecordingMode) => void): (() => void) => {
+    const subscription = (_event: Electron.IpcRendererEvent, data: { mode: RecordingMode }) => {
+      callback(data.mode);
+    };
     ipcRenderer.on(IPC_CHANNELS.RECORDING_START, subscription);
     return () => {
       ipcRenderer.removeListener(IPC_CHANNELS.RECORDING_START, subscription);

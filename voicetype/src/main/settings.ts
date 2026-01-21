@@ -3,22 +3,42 @@ import { AppSettings, DEFAULT_SETTINGS } from '../../shared/types';
 
 // Schema for electron-store validation
 const schema = {
-  apiKey: {
+  // API Keys
+  whisperApiKey: {
     type: 'string' as const,
-    default: DEFAULT_SETTINGS.apiKey,
+    default: DEFAULT_SETTINGS.whisperApiKey,
   },
-  language: {
+  gptApiKey: {
     type: 'string' as const,
-    default: DEFAULT_SETTINGS.language,
+    default: DEFAULT_SETTINGS.gptApiKey,
   },
+
+  // Hotkeys
   hotkey: {
     type: 'string' as const,
     default: DEFAULT_SETTINGS.hotkey,
+  },
+  aiHotkey: {
+    type: 'string' as const,
+    default: DEFAULT_SETTINGS.aiHotkey,
   },
   hotkeyMode: {
     type: 'string' as const,
     enum: ['push-to-talk', 'toggle'],
     default: DEFAULT_SETTINGS.hotkeyMode,
+  },
+
+  // AI Settings
+  gptModel: {
+    type: 'string' as const,
+    enum: ['gpt-4o-mini', 'gpt-4o'],
+    default: DEFAULT_SETTINGS.gptModel,
+  },
+
+  // General Settings
+  language: {
+    type: 'string' as const,
+    default: DEFAULT_SETTINGS.language,
   },
   insertMode: {
     type: 'string' as const,
@@ -53,15 +73,52 @@ class SettingsManager {
     this.store = new Store<AppSettings>({
       schema: schema as any,
       defaults: DEFAULT_SETTINGS,
+      // Migration from old settings format
+      migrations: {
+        '>=1.0.0': (store) => {
+          // Migrate apiKey to whisperApiKey if it exists
+          const oldApiKey = store.get('apiKey' as any);
+          if (oldApiKey && typeof oldApiKey === 'string') {
+            store.set('whisperApiKey', oldApiKey);
+            store.delete('apiKey' as any);
+          }
+        },
+      },
     });
+
+    // Run migration check on startup
+    this.migrateOldSettings();
+  }
+
+  /**
+   * Migrate old settings format to new format
+   */
+  private migrateOldSettings(): void {
+    // Check if old apiKey exists and migrate it
+    const rawStore = this.store.store as any;
+    if (rawStore.apiKey && !rawStore.whisperApiKey) {
+      this.store.set('whisperApiKey', rawStore.apiKey);
+      this.store.delete('apiKey' as any);
+      console.log('Migrated apiKey to whisperApiKey');
+    }
   }
 
   getAll(): AppSettings {
     return {
-      apiKey: this.store.get('apiKey'),
-      language: this.store.get('language'),
+      // API Keys
+      whisperApiKey: this.store.get('whisperApiKey'),
+      gptApiKey: this.store.get('gptApiKey'),
+
+      // Hotkeys
       hotkey: this.store.get('hotkey'),
+      aiHotkey: this.store.get('aiHotkey'),
       hotkeyMode: this.store.get('hotkeyMode'),
+
+      // AI Settings
+      gptModel: this.store.get('gptModel'),
+
+      // General Settings
+      language: this.store.get('language'),
       insertMode: this.store.get('insertMode'),
       selectedMicrophone: this.store.get('selectedMicrophone'),
       autoStart: this.store.get('autoStart'),

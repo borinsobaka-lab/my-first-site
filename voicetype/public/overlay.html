@@ -41,13 +41,25 @@
       flex-shrink: 0;
     }
 
+    /* Dictation mode - blue */
     .icon-container.recording {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      animation: pulse 1.5s ease-in-out infinite;
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      animation: pulse-blue 1.5s ease-in-out infinite;
     }
 
     .icon-container.processing {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      animation: spin 2s linear infinite;
+    }
+
+    /* AI generation mode - purple */
+    .icon-container.ai-recording {
+      background: linear-gradient(135deg, #a855f7, #9333ea);
+      animation: pulse-purple 1.5s ease-in-out infinite;
+    }
+
+    .icon-container.ai-processing {
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
       animation: spin 2s linear infinite;
     }
 
@@ -95,14 +107,25 @@
       word-break: break-word;
     }
 
-    @keyframes pulse {
+    @keyframes pulse-blue {
       0%, 100% {
         transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
       }
       50% {
         transform: scale(1.05);
-        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+        box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+      }
+    }
+
+    @keyframes pulse-purple {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(168, 85, 247, 0);
       }
     }
 
@@ -157,7 +180,7 @@
     const spinnerIcon = document.getElementById('spinner-icon');
     const errorIcon = document.getElementById('error-icon');
 
-    function updateState(state, hotkeyStr) {
+    function updateState(state, hotkeyStr, mode) {
       // Reset all icons
       micIcon.classList.add('hidden');
       spinnerIcon.classList.add('hidden');
@@ -172,11 +195,21 @@
       // Update based on state
       icon.className = 'icon-container';
 
+      const isAiMode = mode === 'ai-generation' || state === 'ai-recording' || state === 'ai-processing';
+
       switch (state) {
         case 'recording':
           icon.classList.add('recording');
           micIcon.classList.remove('hidden');
           title.textContent = 'Запись...';
+          subtitle.classList.remove('hidden');
+          subtitle.innerHTML = 'Нажмите <span class="hotkey">' + hotkey.textContent + '</span> для остановки';
+          break;
+
+        case 'ai-recording':
+          icon.classList.add('ai-recording');
+          micIcon.classList.remove('hidden');
+          title.textContent = 'AI: Запись...';
           subtitle.classList.remove('hidden');
           subtitle.innerHTML = 'Нажмите <span class="hotkey">' + hotkey.textContent + '</span> для остановки';
           break;
@@ -187,6 +220,14 @@
           title.textContent = 'Обработка...';
           subtitle.classList.remove('hidden');
           subtitle.textContent = 'Распознавание речи';
+          break;
+
+        case 'ai-processing':
+          icon.classList.add('ai-processing');
+          spinnerIcon.classList.remove('hidden');
+          title.textContent = 'AI: Обработка...';
+          subtitle.classList.remove('hidden');
+          subtitle.textContent = 'Генерация текста';
           break;
 
         case 'error':
@@ -211,13 +252,13 @@
     // Initialize
     if (window.overlayAPI) {
       // Get initial state
-      window.overlayAPI.getState().then(({ state, hotkey: hk }) => {
-        updateState(state, hk);
+      window.overlayAPI.getState().then(({ state, mode, hotkey: hk }) => {
+        updateState(state, hk, mode);
       });
 
       // Listen for state changes
-      window.overlayAPI.onStateChanged(({ state, hotkey: hk }) => {
-        updateState(state, hk);
+      window.overlayAPI.onStateChanged(({ state, mode, hotkey: hk }) => {
+        updateState(state, hk, mode);
       });
 
       // Listen for errors

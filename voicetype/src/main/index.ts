@@ -4,7 +4,7 @@ import { setupIPC } from './ipc';
 import { registerHotkey, unregisterAllShortcuts, setupRecordingStateSync } from './shortcuts';
 import { createTray, destroyTray, updateTrayState } from './tray';
 import { createOverlayWindow, updateOverlayState, destroyOverlay } from './overlay';
-import { IPC_CHANNELS, RecordingState } from '../../shared/types';
+import { IPC_CHANNELS, RecordingState, RecordingMode } from '../../shared/types';
 import settingsManager from './settings';
 import { initializeWindowFocus } from './windowFocus';
 
@@ -73,10 +73,10 @@ function createWindow(): void {
   createOverlayWindow();
 
   // Handle tray state updates from renderer
-  ipcMain.on(IPC_CHANNELS.TRAY_UPDATE_STATE, (_event, state: RecordingState) => {
-    updateTrayState(state);
+  ipcMain.on(IPC_CHANNELS.TRAY_UPDATE_STATE, (_event, data: { state: RecordingState; mode?: RecordingMode }) => {
+    updateTrayState(data.state);
     // Also update the overlay
-    updateOverlayState(state);
+    updateOverlayState(data.state, data.mode);
   });
 }
 

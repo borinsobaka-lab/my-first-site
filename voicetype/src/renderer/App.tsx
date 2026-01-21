@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AppSettings, RecordingState, LogEntry, DEFAULT_SETTINGS } from '../../shared/types';
+import { AppSettings, RecordingState, RecordingMode, LogEntry, DEFAULT_SETTINGS } from '../../shared/types';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { transcribe } from './services/whisper';
+import { generateText } from './services/gpt';
 import { playStartSound, playStopSound, playErrorSound } from './services/sounds';
 import Settings from './components/Settings';
 import StatusIndicator from './components/StatusIndicator';
@@ -13,6 +14,7 @@ interface HistoryItem {
   text: string;
   timestamp: Date;
   durationSeconds: number;
+  mode: RecordingMode; // Track which mode was used
 }
 
 // Format seconds to human-readable string
@@ -43,6 +45,7 @@ const App: React.FC = () => {
   const settingsRef = useRef(settings);
   const isRecordingRef = useRef(false);
   const recordingStartTimeRef = useRef<number | null>(null);
+  const currentModeRef = useRef<RecordingMode>('dictation');
 
   // Keep refs updated
   useEffect(() => {
@@ -59,8 +62,8 @@ const App: React.FC = () => {
     loadLogs();
 
     // Listen for recording start/stop from main process
-    const unsubStart = window.electronAPI.onRecordingStart(() => {
-      handleStartRecording();
+    const unsubStart = window.electronAPI.onRecordingStart((mode: RecordingMode) => {
+      handleStartRecording(mode);
     });
 
     const unsubStop = window.electronAPI.onRecordingStop(() => {
@@ -86,7 +89,7 @@ const App: React.FC = () => {
 
   // Update tray state when recording state changes
   useEffect(() => {
-    window.electronAPI.updateTrayState(state);
+    window.electronAPI.updateTrayState(state, currentModeRef.current);
   }, [state]);
 
   // Sync recording state to main process
@@ -130,11 +133,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStartRecording = useCallback(async () => {
+  const handleStartRecording = useCallback(async (mode: RecordingMode = 'dictation') => {
     if (isRecordingRef.current) return;
 
+    // Store the mode for later use
+    currentModeRef.current = mode;
+
     setError(null);
-    setState('recording');
+    setState(mode === 'ai-generation' ? 'ai-recording' : 'recording');
     recordingStartTimeRef.current = Date.now();
 
     // Play start sound if enabled
@@ -158,6 +164,8 @@ const App: React.FC = () => {
   const handleStopRecording = useCallback(async () => {
     if (!isRecordingRef.current) return;
 
+    const mode = currentModeRef.current;
+
     // Calculate recording duration using ref
     const startTime = recordingStartTimeRef.current;
     const durationSeconds = startTime
@@ -169,7 +177,7 @@ const App: React.FC = () => {
       playStopSound();
     }
 
-    setState('processing');
+    setState(mode === 'ai-generation' ? 'ai-processing' : 'processing');
 
     try {
       const audioBlob = await stopRecording();
@@ -184,9 +192,20 @@ const App: React.FC = () => {
         return;
       }
 
-      // Check for API key
-      if (!settingsRef.current.apiKey) {
-        setError('Укажите API-ключ OpenAI в настройках');
+      // Check for Whisper API key
+      if (!settingsRef.current.whisperApiKey) {
+        setError('Укажите API-ключ для транскрибации в настройках');
+        setState('error');
+        if (settingsRef.current.soundEnabled) {
+          playErrorSound();
+        }
+        window.electronAPI.syncRecordingState(false);
+        return;
+      }
+
+      // For AI mode, also check GPT API key
+      if (mode === 'ai-generation' && !settingsRef.current.gptApiKey) {
+        setError('Укажите API-ключ для генерации в настройках');
         setState('error');
         if (settingsRef.current.soundEnabled) {
           playErrorSound();
@@ -196,16 +215,29 @@ const App: React.FC = () => {
       }
 
       // Transcribe audio
-      const text = await transcribe(audioBlob, settingsRef.current.apiKey, {
+      const transcribedText = await transcribe(audioBlob, settingsRef.current.whisperApiKey, {
         language: settingsRef.current.language,
       });
+
+      let finalText = transcribedText;
+
+      // For AI generation mode, send to GPT
+      if (mode === 'ai-generation') {
+        console.log('AI Generation mode: sending to GPT...');
+        finalText = await generateText(
+          transcribedText,
+          settingsRef.current.gptApiKey,
+          { model: settingsRef.current.gptModel }
+        );
+      }
 
       // Add to history
       const historyItem: HistoryItem = {
         id: Date.now(),
-        text,
+        text: finalText,
         timestamp: new Date(),
         durationSeconds,
+        mode,
       };
       setHistory(prev => [historyItem, ...prev].slice(0, 50)); // Keep last 50
 
@@ -214,14 +246,14 @@ const App: React.FC = () => {
       handleSaveSettings({ totalRecordingSeconds: newTotal });
 
       // Insert text into active field
-      await window.electronAPI.insertText(text);
-      window.electronAPI.sendTranscriptionResult(text);
+      await window.electronAPI.insertText(finalText);
+      window.electronAPI.sendTranscriptionResult(finalText);
 
       setState('idle');
       window.electronAPI.syncRecordingState(false);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Ошибка транскрибации';
-      console.error('Transcription error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Ошибка обработки';
+      console.error('Processing error:', err);
       setError(errorMessage);
       if (settingsRef.current.soundEnabled) {
         playErrorSound();
@@ -241,11 +273,11 @@ const App: React.FC = () => {
     window.electronAPI.syncRecordingState(false);
   }, [isRecording, stopRecording]);
 
-  const handleManualRecord = async () => {
-    if (state === 'recording') {
+  const handleManualRecord = async (mode: RecordingMode = 'dictation') => {
+    if (state === 'recording' || state === 'ai-recording') {
       await handleStopRecording();
     } else if (state === 'idle') {
-      await handleStartRecording();
+      await handleStartRecording(mode);
     }
   };
 
@@ -260,6 +292,28 @@ const App: React.FC = () => {
   const clearHistory = () => {
     setHistory([]);
   };
+
+  // Get display state info
+  const getStateInfo = () => {
+    switch (state) {
+      case 'recording':
+        return { title: 'Диктовка...', subtitle: 'Говорите... Нажмите хоткей для остановки', color: 'blue' };
+      case 'ai-recording':
+        return { title: 'AI-запись...', subtitle: 'Диктуйте инструкцию... Нажмите хоткей для остановки', color: 'purple' };
+      case 'processing':
+        return { title: 'Распознавание...', subtitle: 'Обработка речи', color: 'orange' };
+      case 'ai-processing':
+        return { title: 'AI-генерация...', subtitle: 'Генерация текста через GPT', color: 'purple' };
+      case 'error':
+        return { title: 'Ошибка', subtitle: error || 'Произошла ошибка', color: 'red' };
+      default:
+        return { title: 'Готово к записи', subtitle: `${settings.hotkey} — диктовка, ${settings.aiHotkey} — AI`, color: 'gray' };
+    }
+  };
+
+  const stateInfo = getStateInfo();
+  const isAnyRecording = state === 'recording' || state === 'ai-recording';
+  const isAnyProcessing = state === 'processing' || state === 'ai-processing';
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -335,49 +389,67 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-y-auto p-4">
         {activeTab === 'home' && (
           <div className="space-y-6">
-            {/* Quick status card */}
+            {/* Recording buttons */}
             <div className="bg-white rounded-xl p-6 shadow-sm border">
               <div className="text-center">
-                <div className="mb-4 flex justify-center">
-                  <button
-                    onClick={handleManualRecord}
-                    disabled={state === 'processing'}
-                    className={`w-24 h-24 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
-                      state === 'recording'
-                        ? 'bg-recording animate-pulse-recording'
-                        : state === 'processing'
-                        ? 'bg-processing cursor-not-allowed'
-                        : 'bg-primary-500 hover:bg-primary-600 hover:scale-105'
-                    }`}
-                  >
-                    <svg
-                      className="w-12 h-12 text-white"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
+                <div className="mb-4 flex justify-center gap-4">
+                  {/* Dictation button */}
+                  <div className="text-center">
+                    <button
+                      onClick={() => handleManualRecord('dictation')}
+                      disabled={isAnyProcessing}
+                      className={`w-20 h-20 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                        state === 'recording'
+                          ? 'bg-blue-500 animate-pulse'
+                          : isAnyProcessing
+                          ? 'bg-gray-300 cursor-not-allowed'
+                          : 'bg-blue-500 hover:bg-blue-600 hover:scale-105'
+                      }`}
                     >
-                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-10 h-10 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                      </svg>
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">Диктовка</p>
+                    <p className="text-xs text-gray-400">{settings.hotkey}</p>
+                  </div>
+
+                  {/* AI Generation button */}
+                  <div className="text-center">
+                    <button
+                      onClick={() => handleManualRecord('ai-generation')}
+                      disabled={isAnyProcessing}
+                      className={`w-20 h-20 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                        state === 'ai-recording'
+                          ? 'bg-purple-500 animate-pulse'
+                          : isAnyProcessing
+                          ? 'bg-gray-300 cursor-not-allowed'
+                          : 'bg-purple-500 hover:bg-purple-600 hover:scale-105'
+                      }`}
+                    >
+                      <svg
+                        className="w-10 h-10 text-white"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+                      </svg>
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2">AI-генерация</p>
+                    <p className="text-xs text-gray-400">{settings.aiHotkey}</p>
+                  </div>
                 </div>
 
                 <h2 className="text-lg font-semibold text-gray-800 mb-1">
-                  {state === 'idle'
-                    ? 'Готово к записи'
-                    : state === 'recording'
-                    ? 'Идёт запись...'
-                    : state === 'processing'
-                    ? 'Обработка...'
-                    : 'Ошибка'}
+                  {stateInfo.title}
                 </h2>
                 <p className="text-sm text-gray-500">
-                  {state === 'idle'
-                    ? `Нажмите ${settings.hotkey} или кнопку выше`
-                    : state === 'recording'
-                    ? 'Говорите... Нажмите хоткей снова для остановки'
-                    : state === 'processing'
-                    ? 'Распознавание речи'
-                    : error || 'Произошла ошибка'}
+                  {stateInfo.subtitle}
                 </p>
               </div>
             </div>
@@ -386,8 +458,9 @@ const App: React.FC = () => {
             {history.length > 0 && (
               <div className="bg-white rounded-xl p-6 shadow-sm border">
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-sm font-medium text-gray-500">
-                    Последняя транскрибация
+                  <h3 className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${history[0].mode === 'ai-generation' ? 'bg-purple-500' : 'bg-blue-500'}`}></span>
+                    {history[0].mode === 'ai-generation' ? 'Последняя AI-генерация' : 'Последняя транскрибация'}
                   </h3>
                   <button
                     onClick={() => copyToClipboard(history[0].text)}
@@ -434,18 +507,23 @@ const App: React.FC = () => {
             {/* Quick tips */}
             <div className="bg-gray-100 rounded-xl p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-2">
-                Подсказки
+                Режимы работы
               </h3>
-              <ul className="text-sm text-gray-600 space-y-1">
-                <li>
-                  Нажмите <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd> для начала/остановки записи
+              <ul className="text-sm text-gray-600 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span className="w-3 h-3 bg-blue-500 rounded-full mt-1 flex-shrink-0"></span>
+                  <span>
+                    <strong>Диктовка</strong> (<kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">{settings.hotkey}</kbd>) —
+                    записывает голос и вставляет текст как есть
+                  </span>
                 </li>
-                <li>Приложение работает в фоне — просто переключитесь на текстовое поле</li>
-                {settings.insertMode === 'clipboard' ? (
-                  <li>Текст копируется в буфер обмена — вставьте через Ctrl+V</li>
-                ) : (
-                  <li>Текст автоматически вставляется в активное поле</li>
-                )}
+                <li className="flex items-start gap-2">
+                  <span className="w-3 h-3 bg-purple-500 rounded-full mt-1 flex-shrink-0"></span>
+                  <span>
+                    <strong>AI-генерация</strong> (<kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">{settings.aiHotkey}</kbd>) —
+                    диктуйте инструкцию, GPT сгенерирует текст
+                  </span>
+                </li>
               </ul>
             </div>
           </div>
@@ -494,7 +572,7 @@ const App: React.FC = () => {
 
             {history.length === 0 ? (
               <div className="bg-white rounded-xl p-8 shadow-sm border text-center">
-                <p className="text-gray-500">Транскрибаций пока нет</p>
+                <p className="text-gray-500">Записей пока нет</p>
                 <p className="text-sm text-gray-400 mt-1">
                   История ваших записей появится здесь
                 </p>
@@ -526,6 +604,9 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                      <span className={`w-2 h-2 rounded-full ${item.mode === 'ai-generation' ? 'bg-purple-500' : 'bg-blue-500'}`}></span>
+                      <span>{item.mode === 'ai-generation' ? 'AI' : 'Диктовка'}</span>
+                      <span>•</span>
                       <span>{item.timestamp.toLocaleString('ru-RU')}</span>
                       <span>•</span>
                       <span>{item.durationSeconds} сек</span>

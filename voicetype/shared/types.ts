@@ -1,9 +1,19 @@
 // App Settings
 export interface AppSettings {
-  apiKey: string;
-  language: string; // 'auto' | 'en' | 'ru' | 'de' | 'es' | 'fr' | 'ja' | 'zh' | ...
-  hotkey: string; // 'Ctrl+Shift+Space'
+  // API Keys
+  whisperApiKey: string;  // API key for transcription (Whisper)
+  gptApiKey: string;      // API key for AI generation (GPT)
+
+  // Hotkeys
+  hotkey: string;         // Hotkey for dictation mode (e.g., 'Ctrl+Shift+Space')
+  aiHotkey: string;       // Hotkey for AI generation mode
   hotkeyMode: 'push-to-talk' | 'toggle';
+
+  // AI Settings
+  gptModel: 'gpt-4o-mini' | 'gpt-4o';
+
+  // General Settings
+  language: string;       // 'auto' | 'en' | 'ru' | 'de' | 'es' | 'fr' | 'ja' | 'zh' | ...
   insertMode: 'type' | 'clipboard';
   selectedMicrophone: string | null;
   autoStart: boolean;
@@ -11,8 +21,17 @@ export interface AppSettings {
   totalRecordingSeconds: number;
 }
 
-// Recording states
-export type RecordingState = 'idle' | 'recording' | 'processing' | 'error';
+// Recording mode - which hotkey was pressed
+export type RecordingMode = 'dictation' | 'ai-generation';
+
+// Recording states (extended for AI mode)
+export type RecordingState =
+  | 'idle'
+  | 'recording'      // Dictation recording
+  | 'processing'     // Dictation processing (Whisper)
+  | 'ai-recording'   // AI generation recording
+  | 'ai-processing'  // AI generation processing (Whisper + GPT)
+  | 'error';
 
 // Whisper API response
 export interface WhisperResponse {
@@ -28,7 +47,7 @@ export interface WhisperOptions {
 // IPC channel names
 export const IPC_CHANNELS = {
   // Main → Renderer
-  RECORDING_START: 'recording:start',
+  RECORDING_START: 'recording:start',           // data: { mode: RecordingMode }
   RECORDING_STOP: 'recording:stop',
   STATE_CHANGED: 'state:changed',
   LOG_MESSAGE: 'log:message',
@@ -62,16 +81,32 @@ export interface LogEntry {
 
 // Default settings
 export const DEFAULT_SETTINGS: AppSettings = {
-  apiKey: '',
-  language: 'auto',
+  // API Keys
+  whisperApiKey: '',
+  gptApiKey: '',
+
+  // Hotkeys
   hotkey: 'Ctrl+Shift+Space',
+  aiHotkey: 'Ctrl+Shift+G',
   hotkeyMode: 'toggle',
+
+  // AI Settings
+  gptModel: 'gpt-4o-mini',
+
+  // General Settings
+  language: 'auto',
   insertMode: 'type',
   selectedMicrophone: null,
   autoStart: false,
   soundEnabled: true,
   totalRecordingSeconds: 0,
 };
+
+// GPT Models for selection
+export const GPT_MODELS = [
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (быстрее и дешевле)' },
+  { id: 'gpt-4o', name: 'GPT-4o (умнее, но дороже)' },
+] as const;
 
 // Supported languages for Whisper API (with Russian names)
 export const SUPPORTED_LANGUAGES = [
