@@ -9,9 +9,11 @@ import { RecordingState, RecordingMode, IPC_CHANNELS } from '../../shared/types'
 import settingsManager from './settings';
 
 let overlayWindow: BrowserWindow | null = null;
+let overlayReady = false;
 let currentState: RecordingState = 'idle';
 let currentMode: RecordingMode = 'dictation';
 let hideTimeout: NodeJS.Timeout | null = null;
+let pendingState: { state: RecordingState; mode: RecordingMode; hotkey: string } | null = null;
 
 const isDev = process.env.NODE_ENV === 'development' || !process.env.npm_package_version;
 
@@ -56,6 +58,21 @@ export function createOverlayWindow(): void {
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;
+    overlayReady = false;
+  });
+
+  // Track when overlay content is ready
+  overlayWindow.webContents.on('did-finish-load', () => {
+    console.log('[Overlay] Content loaded, overlay is ready');
+    overlayReady = true;
+
+    // Send any pending state
+    if (pendingState && overlayWindow) {
+      console.log('[Overlay] Sending pending state:', pendingState);
+      overlayWindow.webContents.send('overlay:state-changed', pendingState);
+      overlayWindow.showInactive();
+      pendingState = null;
+    }
   });
 
   // Setup IPC handlers for overlay
@@ -78,6 +95,8 @@ function setupOverlayIPC(): void {
  * Update overlay state
  */
 export function updateOverlayState(state: RecordingState, mode?: RecordingMode): void {
+  console.log('[Overlay] updateOverlayState called:', { state, mode });
+
   currentState = state;
   if (mode) {
     currentMode = mode;
@@ -90,10 +109,14 @@ export function updateOverlayState(state: RecordingState, mode?: RecordingMode):
   }
 
   if (!overlayWindow) {
+    console.log('[Overlay] Creating overlay window...');
     createOverlayWindow();
   }
 
-  if (!overlayWindow) return;
+  if (!overlayWindow) {
+    console.log('[Overlay] Failed to create overlay window');
+    return;
+  }
 
   // Show overlay for recording, processing, error states
   const showStates: RecordingState[] = ['recording', 'processing', 'ai-recording', 'ai-processing', 'error'];
@@ -101,10 +124,20 @@ export function updateOverlayState(state: RecordingState, mode?: RecordingMode):
     const hotkey = currentMode === 'ai-generation'
       ? settingsManager.get('aiHotkey')
       : settingsManager.get('hotkey');
-    overlayWindow.webContents.send('overlay:state-changed', { state, mode: currentMode, hotkey });
-    overlayWindow.showInactive();
+
+    if (overlayReady) {
+      console.log('[Overlay] Showing overlay for state:', state, 'hotkey:', hotkey);
+      overlayWindow.webContents.send('overlay:state-changed', { state, mode: currentMode, hotkey });
+      overlayWindow.showInactive();
+    } else {
+      console.log('[Overlay] Overlay not ready, queueing state:', state);
+      pendingState = { state, mode: currentMode, hotkey };
+      // Show the window anyway - it will update when ready
+      overlayWindow.showInactive();
+    }
   } else if (state === 'idle') {
-    // Hide overlay when idle (after successful insert or cancel)
+    console.log('[Overlay] Hiding overlay');
+    pendingState = null;
     overlayWindow.hide();
   }
 }

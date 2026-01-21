@@ -1,8 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { RecordingState } from '../../shared/types';
+import { RecordingState, RecordingMode } from '../../shared/types';
 
 interface OverlayState {
   state: RecordingState;
+  mode: RecordingMode;
   hotkey: string;
 }
 
