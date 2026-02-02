@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Padel Coach AI - Анализ матчей</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">🎾</span>
+                <h1>Padel Coach AI</h1>
+            </div>
+            <nav class="nav">
+                <button class="nav-btn active" data-view="analyze">Анализ</button>
+                <button class="nav-btn" data-view="history">История</button>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Analyze View -->
+            <section id="analyze-view" class="view active">
+                <div class="analyze-container">
+                    <div class="hero">
+                        <h2>Персональный тренер по падлу</h2>
+                        <p>Загрузите YouTube-ссылку на ваш матч и получите профессиональный разбор игры каждого участника</p>
+                    </div>
+
+                    <form id="analyze-form" class="analyze-form">
+                        <div class="input-group">
+                            <label for="youtube-url">YouTube URL</label>
+                            <input
+                                type="url"
+                                id="youtube-url"
+                                placeholder="https://youtube.com/watch?v=..."
+                                required
+                            >
+                            <span class="input-hint">Видео должно быть публичным</span>
+                        </div>
+
+                        <button type="submit" class="btn-primary">
+                            <span class="btn-text">Анализировать матч</span>
+                            <span class="btn-loader hidden"></span>
+                        </button>
+                    </form>
+
+                    <div class="features">
+                        <div class="feature">
+                            <div class="feature-icon">📍</div>
+                            <h3>Позиционирование</h3>
+                            <p>Анализ перемещений и занятых зон на корте</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">🎯</div>
+                            <h3>Тактика</h3>
+                            <p>Оценка принятия решений и выбора ударов</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">🤝</div>
+                            <h3>Командная игра</h3>
+                            <p>Синхронность и взаимодействие с партнёром</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">💪</div>
+                            <h3>Техника</h3>
+                            <p>Подготовка к ударам и баланс тела</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Progress View -->
+            <section id="progress-view" class="view">
+                <div class="progress-container">
+                    <div class="progress-animation">
+                        <div class="ball"></div>
+                    </div>
+                    <h2 id="progress-title">Анализируем ваш матч...</h2>
+                    <p id="progress-status">Загружаем видео в систему</p>
+
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <span class="progress-percent" id="progress-percent">0%</span>
+                    </div>
+
+                    <p class="eta" id="eta">Примерное время ожидания: ~5-10 минут</p>
+
+                    <button class="btn-secondary" id="cancel-btn">Отменить</button>
+                </div>
+            </section>
+
+            <!-- Results View -->
+            <section id="results-view" class="view">
+                <div class="results-container">
+                    <!-- Match Summary -->
+                    <div class="match-summary" id="match-summary">
+                        <h2>Обзор матча</h2>
+                        <div class="summary-content"></div>
+                    </div>
+
+                    <!-- Player Tabs -->
+                    <div class="players-section">
+                        <h2>Анализ игроков</h2>
+                        <div class="player-tabs" id="player-tabs"></div>
+                        <div class="player-content" id="player-content"></div>
+                    </div>
+
+                    <!-- Team Analysis -->
+                    <div class="teams-section" id="teams-section">
+                        <h2>Анализ команд</h2>
+                        <div class="teams-content" id="teams-content"></div>
+                    </div>
+
+                    <!-- Patterns -->
+                    <div class="patterns-section" id="patterns-section">
+                        <h2>Общие паттерны</h2>
+                        <div class="patterns-content" id="patterns-content"></div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="results-actions">
+                        <button class="btn-secondary" id="new-analysis-btn">Новый анализ</button>
+                        <button class="btn-primary" id="download-pdf-btn">Скачать PDF</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- History View -->
+            <section id="history-view" class="view">
+                <div class="history-container">
+                    <h2>История анализов</h2>
+                    <div class="history-list" id="history-list">
+                        <p class="empty-state">Загрузка...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Error View -->
+            <section id="error-view" class="view">
+                <div class="error-container">
+                    <div class="error-icon">⚠️</div>
+                    <h2 id="error-title">Произошла ошибка</h2>
+                    <p id="error-message">Что-то пошло не так. Попробуйте ещё раз.</p>
+                    <button class="btn-primary" id="retry-btn">Попробовать снова</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Padel Coach AI &copy; 2024 | Анализ на базе Google Gemini</p>
+        </footer>
+    </div>
+
+    <script src="components/progress.js"></script>
+    <script src="components/results.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
