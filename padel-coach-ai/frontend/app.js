@@ -297,11 +297,47 @@ async function loadResult() {
 
 // Results Rendering
 function renderResults(analysis) {
+    embedYouTubeVideo(currentVideoUrl);
     renderMatchSummary(analysis.match_summary);
     renderPlayers(analysis.players);
     renderTeams(analysis.team_analysis);
     renderPatterns(analysis.patterns_observed);
     renderOverallRecommendations(analysis.overall_recommendations);
+}
+
+function embedYouTubeVideo(url) {
+    const iframe = document.getElementById('video-embed');
+    const section = document.getElementById('video-embed-section');
+
+    if (!url) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    // Extract video ID and create embed URL
+    const videoId = extractVideoId(url);
+    if (videoId) {
+        iframe.src = `https://www.youtube.com/embed/${videoId}`;
+        section.classList.remove('hidden');
+    } else {
+        section.classList.add('hidden');
+    }
+}
+
+function extractVideoId(url) {
+    const patterns = [
+        /youtube\.com\/watch\?v=([\w-]+)/,
+        /youtube\.com\/live\/([\w-]+)/,
+        /youtu\.be\/([\w-]+)/,
+    ];
+
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) {
+            return match[1];
+        }
+    }
+    return null;
 }
 
 function renderMatchSummary(summary) {
