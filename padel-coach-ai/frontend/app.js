@@ -301,6 +301,7 @@ function renderResults(analysis) {
     renderPlayers(analysis.players);
     renderTeams(analysis.team_analysis);
     renderPatterns(analysis.patterns_observed);
+    renderOverallRecommendations(analysis.overall_recommendations);
 }
 
 function renderMatchSummary(summary) {
@@ -314,7 +315,19 @@ function renderMatchSummary(summary) {
             <p class="text-sm text-white/70 mb-1">Преимущество</p>
             <p class="font-semibold">${summary.dominant_team}</p>
         </div>
-        <div class="bg-white/10 rounded-xl p-4 md:col-span-1">
+        ${summary.intensity_level ? `
+        <div class="bg-white/10 rounded-xl p-4">
+            <p class="text-sm text-white/70 mb-1">Интенсивность</p>
+            <p class="font-semibold">${summary.intensity_level}</p>
+        </div>
+        ` : ''}
+        ${summary.rallies_character ? `
+        <div class="bg-white/10 rounded-xl p-4">
+            <p class="text-sm text-white/70 mb-1">Розыгрыши</p>
+            <p class="font-semibold text-sm">${summary.rallies_character}</p>
+        </div>
+        ` : ''}
+        <div class="bg-white/10 rounded-xl p-4 md:col-span-2">
             <p class="text-sm text-white/70 mb-1">Характер матча</p>
             <p class="font-semibold text-sm">${summary.match_character}</p>
         </div>
@@ -376,6 +389,7 @@ function renderPlayerCard(player, isActive) {
                 <div>
                     <h3 class="text-xl font-bold text-gray-900">${player.id}</h3>
                     <p class="text-gray-500">${player.description}</p>
+                    ${player.estimated_level ? `<p class="text-sm text-primary-600 font-medium mt-1">Уровень: ${player.estimated_level}</p>` : ''}
                 </div>
                 <div class="flex items-center gap-4">
                     <div class="text-center px-6 py-3 bg-primary-50 rounded-xl">
@@ -386,7 +400,7 @@ function renderPlayerCard(player, isActive) {
             </div>
 
             <!-- Scores -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 ${Object.entries(player.scores).map(([key, value]) => `
                     <div class="text-center p-4 bg-gray-50 rounded-xl">
                         <div class="text-2xl font-bold text-gray-700">${value}</div>
@@ -394,6 +408,50 @@ function renderPlayerCard(player, isActive) {
                     </div>
                 `).join('')}
             </div>
+
+            <!-- Zone Analysis -->
+            ${player.zone_analysis ? `
+            <div class="mb-6 p-4 bg-blue-50 rounded-xl">
+                <h4 class="font-semibold text-blue-900 mb-2 text-sm">Анализ зон</h4>
+                <div class="flex flex-wrap gap-4 text-sm">
+                    ${player.zone_analysis.green_zone_time ? `
+                    <div>
+                        <span class="text-blue-600">Зелёная зона (атака):</span>
+                        <span class="font-medium">${player.zone_analysis.green_zone_time}</span>
+                    </div>
+                    ` : ''}
+                    ${player.zone_analysis.orange_zone_problem ? `
+                    <div class="text-orange-700">
+                        <span class="font-medium">Оранжевая зона:</span> ${player.zone_analysis.orange_zone_comment || 'Требует внимания'}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- Shot Analysis -->
+            ${player.shot_analysis ? `
+            <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+                ${player.shot_analysis.best_shot ? `
+                <div class="p-3 bg-green-50 rounded-lg">
+                    <p class="text-xs text-green-700 font-medium">Лучший удар</p>
+                    <p class="text-sm text-gray-900">${player.shot_analysis.best_shot}</p>
+                </div>
+                ` : ''}
+                ${player.shot_analysis.weakest_shot ? `
+                <div class="p-3 bg-orange-50 rounded-lg">
+                    <p class="text-xs text-orange-700 font-medium">Требует работы</p>
+                    <p class="text-sm text-gray-900">${player.shot_analysis.weakest_shot}</p>
+                </div>
+                ` : ''}
+                ${player.shot_analysis.power_control ? `
+                <div class="p-3 bg-gray-50 rounded-lg">
+                    <p class="text-xs text-gray-600 font-medium">Контроль силы</p>
+                    <p class="text-sm text-gray-900">${player.shot_analysis.power_control}</p>
+                </div>
+                ` : ''}
+            </div>
+            ` : ''}
 
             <!-- Strengths -->
             <div class="mb-8">
@@ -404,9 +462,25 @@ function renderPlayerCard(player, isActive) {
                 <div class="space-y-3">
                     ${player.strengths.map(strength => `
                         <div class="p-4 bg-green-50 border-l-4 border-green-500 rounded-r-xl">
+                            ${strength.category ? `<span class="text-xs text-green-700 font-medium uppercase">${strength.category}</span>` : ''}
                             <p class="font-medium text-gray-900">${strength.point}</p>
-                            <p class="text-sm text-gray-600 mt-1">${strength.example_description}</p>
-                            ${renderTimestamp(strength.example_timestamp)}
+                            ${strength.why_important ? `<p class="text-sm text-green-700 mt-1">${strength.why_important}</p>` : ''}
+                            ${strength.examples && strength.examples.length > 0 ? `
+                                <div class="mt-2 space-y-1">
+                                    ${strength.examples.map(ex => `
+                                        <div class="flex items-start gap-2 text-sm">
+                                            <span class="text-green-600">•</span>
+                                            <div>
+                                                <span class="text-gray-600">${ex.description}</span>
+                                                ${renderTimestamp(ex.timestamp)}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `
+                                ${strength.example_description ? `<p class="text-sm text-gray-600 mt-1">${strength.example_description}</p>` : ''}
+                                ${renderTimestamp(strength.example_timestamp)}
+                            `}
                         </div>
                     `).join('')}
                 </div>
@@ -447,12 +521,17 @@ function renderPlayerCard(player, isActive) {
                                 ${renderTimestamp(imp.example_timestamp)}
                             `}
 
+                            ${imp.impact ? `<p class="text-sm text-red-700 mt-2"><strong>Влияние:</strong> ${imp.impact}</p>` : ''}
+                            ${imp.root_cause ? `<p class="text-sm text-gray-600 mt-1"><strong>Причина:</strong> ${imp.root_cause}</p>` : ''}
                             <p class="text-sm text-gray-700 mt-3"><strong>Как исправить:</strong> ${imp.how_to_fix}</p>
                             ${imp.drill ? `
                                 <div class="mt-3 p-3 bg-white rounded-lg border border-orange-200">
                                     <p class="font-medium text-orange-700 text-sm">Упражнение: ${imp.drill.name}</p>
                                     <p class="text-xs text-gray-500 mt-1">${imp.drill.duration}</p>
+                                    ${imp.drill.setup ? `<p class="text-sm text-gray-600 mt-1"><strong>Подготовка:</strong> ${imp.drill.setup}</p>` : ''}
                                     <p class="text-sm text-gray-600 mt-1">${imp.drill.description}</p>
+                                    ${imp.drill.focus ? `<p class="text-sm text-blue-600 mt-1"><strong>Фокус:</strong> ${imp.drill.focus}</p>` : ''}
+                                    ${imp.drill.progression ? `<p class="text-sm text-green-600 mt-1"><strong>Усложнение:</strong> ${imp.drill.progression}</p>` : ''}
                                 </div>
                             ` : ''}
                         </div>
@@ -468,10 +547,12 @@ function renderPlayerCard(player, isActive) {
                 </h4>
                 <div class="space-y-2">
                     ${player.key_moments.map(moment => `
-                        <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                            <span class="text-lg">${moment.type === 'positive' ? '✅' : moment.type === 'negative' ? '❌' : '💡'}</span>
+                        <div class="flex items-start gap-3 p-3 ${getMomentBgClass(moment.type)} rounded-xl">
+                            <span class="text-lg">${getMomentIcon(moment.type)}</span>
                             <div class="flex-1">
+                                ${moment.category ? `<span class="text-xs font-medium text-gray-500 uppercase">${moment.category}</span>` : ''}
                                 <p class="text-sm text-gray-700">${moment.description}</p>
+                                ${moment.lesson ? `<p class="text-xs text-blue-600 mt-1 italic">${moment.lesson}</p>` : ''}
                                 ${renderTimestamp(moment.timestamp)}
                             </div>
                         </div>
@@ -479,11 +560,27 @@ function renderPlayerCard(player, isActive) {
                 </div>
             </div>
 
+            <!-- Mental Notes -->
+            ${player.mental_notes ? `
+            <div class="mb-6 p-4 bg-purple-50 rounded-xl border-l-4 border-purple-400">
+                <h4 class="font-semibold text-purple-900 mb-2 text-sm">Ментальные заметки</h4>
+                <p class="text-sm text-gray-700">${player.mental_notes}</p>
+            </div>
+            ` : ''}
+
             <!-- Progress Focus -->
-            <div class="p-6 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl text-white text-center">
+            <div class="p-6 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl text-white text-center mb-4">
                 <p class="text-sm opacity-90 mb-2">Фокус на ближайший месяц</p>
                 <p class="font-semibold">${player.progress_focus}</p>
             </div>
+
+            <!-- Next Level Requirements -->
+            ${player.next_level_requirements ? `
+            <div class="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                <p class="text-sm text-amber-800 font-medium mb-1">Для выхода на следующий уровень</p>
+                <p class="text-sm text-gray-700">${player.next_level_requirements}</p>
+            </div>
+            ` : ''}
         </div>
     `;
 }
@@ -514,6 +611,30 @@ function renderTimestamp(timestamp) {
     return `<span class="text-sm text-gray-500 mt-2">${timestamp}</span>`;
 }
 
+function getMomentIcon(type) {
+    switch(type) {
+        case 'brilliant': return '🌟';
+        case 'good':
+        case 'positive': return '✅';
+        case 'mistake':
+        case 'negative': return '⚠️';
+        case 'critical_error': return '❌';
+        default: return '💡';
+    }
+}
+
+function getMomentBgClass(type) {
+    switch(type) {
+        case 'brilliant': return 'bg-yellow-50 border border-yellow-200';
+        case 'good':
+        case 'positive': return 'bg-green-50';
+        case 'mistake':
+        case 'negative': return 'bg-orange-50';
+        case 'critical_error': return 'bg-red-50 border border-red-200';
+        default: return 'bg-gray-50';
+    }
+}
+
 function renderTeams(teams) {
     const container = document.getElementById('teams-content');
     container.innerHTML = `
@@ -526,8 +647,34 @@ function renderTeams(teams) {
                             Синергия: ${team.partnership_score}/9
                         </span>
                     </div>
-                    <p class="text-sm text-gray-500 mb-4">${team.players.join(' + ')}</p>
-                    <p class="text-sm text-gray-700 mb-4">${team.synergy_description}</p>
+                    <p class="text-sm text-gray-500 mb-2">${team.players.join(' + ')}</p>
+                    ${team.synergy_style ? `<p class="text-sm text-primary-600 font-medium mb-3">${team.synergy_style}</p>` : ''}
+                    ${team.synergy_description ? `<p class="text-sm text-gray-700 mb-4">${team.synergy_description}</p>` : ''}
+
+                    <!-- Team metrics -->
+                    ${(team.movement_sync || team.center_coverage || team.communication_level) ? `
+                    <div class="grid grid-cols-3 gap-2 mb-4 text-center">
+                        ${team.movement_sync ? `
+                        <div class="p-2 bg-white rounded-lg">
+                            <p class="text-xs text-gray-500">Синхронность</p>
+                            <p class="text-sm font-medium ${getMetricColor(team.movement_sync)}">${team.movement_sync}</p>
+                        </div>
+                        ` : ''}
+                        ${team.center_coverage ? `
+                        <div class="p-2 bg-white rounded-lg">
+                            <p class="text-xs text-gray-500">Центр</p>
+                            <p class="text-sm font-medium ${getMetricColor(team.center_coverage)}">${team.center_coverage}</p>
+                        </div>
+                        ` : ''}
+                        ${team.communication_level ? `
+                        <div class="p-2 bg-white rounded-lg">
+                            <p class="text-xs text-gray-500">Общение</p>
+                            <p class="text-sm font-medium ${getMetricColor(team.communication_level)}">${team.communication_level}</p>
+                        </div>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+
                     <div class="space-y-3">
                         <div class="p-3 bg-green-50 rounded-lg">
                             <p class="text-xs text-green-700 font-medium mb-1">Сильная сторона</p>
@@ -537,15 +684,36 @@ function renderTeams(teams) {
                             <p class="text-xs text-orange-700 font-medium mb-1">Слабая сторона</p>
                             <p class="text-sm text-gray-700">${team.weakness}</p>
                         </div>
+                        ${team.dangerous_pattern ? `
+                        <div class="p-3 bg-red-50 rounded-lg border border-red-200">
+                            <p class="text-xs text-red-700 font-medium mb-1">Уязвимость</p>
+                            <p class="text-sm text-gray-700">${team.dangerous_pattern}</p>
+                        </div>
+                        ` : ''}
                         <div class="p-3 bg-blue-50 rounded-lg">
                             <p class="text-xs text-blue-700 font-medium mb-1">Рекомендация</p>
                             <p class="text-sm text-gray-700">${team.recommendation}</p>
                         </div>
+                        ${team.pair_drill ? `
+                        <div class="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                            <p class="text-xs text-purple-700 font-medium mb-1">Упражнение для пары</p>
+                            <p class="text-sm font-medium text-gray-900">${team.pair_drill.name}</p>
+                            <p class="text-sm text-gray-600">${team.pair_drill.description}</p>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('')}
         </div>
     `;
+}
+
+function getMetricColor(value) {
+    const lower = value.toLowerCase();
+    if (lower.includes('отличн') || lower.includes('надёжн') || lower.includes('активн')) return 'text-green-600';
+    if (lower.includes('хорош') || lower.includes('базов')) return 'text-blue-600';
+    if (lower.includes('требует') || lower.includes('провал') || lower.includes('недостаточ') || lower.includes('проблем')) return 'text-orange-600';
+    return 'text-gray-700';
 }
 
 function renderPatterns(patterns) {
@@ -560,17 +728,71 @@ function renderPatterns(patterns) {
         <div class="space-y-4">
             ${patterns.map(pattern => `
                 <div class="p-4 bg-gray-50 rounded-xl">
-                    <div class="flex items-start justify-between gap-4 mb-3">
-                        <h5 class="font-medium text-gray-900">${pattern.pattern}</h5>
-                        <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium">${pattern.frequency}</span>
+                    <div class="flex items-start justify-between gap-4 mb-2">
+                        <div>
+                            ${pattern.pattern_type ? `<span class="text-xs font-medium text-primary-600 uppercase">${pattern.pattern_type}</span>` : ''}
+                            <h5 class="font-medium text-gray-900">${pattern.pattern}</h5>
+                        </div>
+                        <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium whitespace-nowrap">${pattern.frequency}</span>
                     </div>
+                    ${pattern.description ? `<p class="text-sm text-gray-600 mb-2">${pattern.description}</p>` : ''}
                     <p class="text-sm text-gray-500 mb-3">Затронутые игроки: ${pattern.affected_players.join(', ')}</p>
+
+                    ${pattern.timestamps && pattern.timestamps.length > 0 ? `
+                    <div class="mb-3 p-2 bg-white rounded-lg">
+                        <p class="text-xs text-gray-500 mb-1">Моменты (${pattern.timestamps.length}):</p>
+                        <div class="flex flex-wrap gap-1">
+                            ${pattern.timestamps.map(ts => renderTimestamp(ts)).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    ${pattern.consequence ? `
+                    <p class="text-sm text-orange-700 mb-2"><strong>Последствие:</strong> ${pattern.consequence}</p>
+                    ` : ''}
+
                     <div class="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
                         <p class="text-sm text-gray-700"><strong>Решение:</strong> ${pattern.solution}</p>
                     </div>
+
+                    ${pattern.practice_focus ? `
+                    <p class="text-sm text-blue-600 mt-2"><strong>На тренировке:</strong> ${pattern.practice_focus}</p>
+                    ` : ''}
                 </div>
             `).join('')}
         </div>
+    `;
+}
+
+function renderOverallRecommendations(recommendations) {
+    const section = document.getElementById('recommendations-section');
+    const container = document.getElementById('recommendations-content');
+
+    if (!recommendations) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    section.classList.remove('hidden');
+    container.innerHTML = `
+        ${recommendations.team1_priority ? `
+        <div class="bg-white/20 rounded-xl p-4">
+            <p class="text-sm text-white/80 mb-1">Команда 1 — приоритет</p>
+            <p class="font-semibold">${recommendations.team1_priority}</p>
+        </div>
+        ` : ''}
+        ${recommendations.team2_priority ? `
+        <div class="bg-white/20 rounded-xl p-4">
+            <p class="text-sm text-white/80 mb-1">Команда 2 — приоритет</p>
+            <p class="font-semibold">${recommendations.team2_priority}</p>
+        </div>
+        ` : ''}
+        ${recommendations.match_level_assessment ? `
+        <div class="bg-white/20 rounded-xl p-4 md:col-span-2">
+            <p class="text-sm text-white/80 mb-1">Общий уровень матча</p>
+            <p class="font-semibold">${recommendations.match_level_assessment}</p>
+        </div>
+        ` : ''}
     `;
 }
 
