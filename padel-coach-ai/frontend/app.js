@@ -421,12 +421,32 @@ function renderPlayerCard(player, isActive) {
                 <div class="space-y-4">
                     ${player.improvements.map(imp => `
                         <div class="p-4 bg-orange-50 border-l-4 border-orange-500 rounded-r-xl">
-                            <span class="inline-block px-2 py-1 bg-orange-500 text-white text-xs font-medium rounded mb-2">
-                                Приоритет ${imp.priority}
-                            </span>
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="inline-block px-2 py-1 bg-orange-500 text-white text-xs font-medium rounded">
+                                    Приоритет ${imp.priority}
+                                </span>
+                                ${imp.frequency ? `<span class="inline-block px-2 py-1 bg-orange-200 text-orange-800 text-xs font-medium rounded">${imp.frequency}</span>` : ''}
+                            </div>
                             <p class="font-medium text-gray-900">${imp.issue}</p>
-                            <p class="text-sm text-gray-600 mt-1">${imp.example_description}</p>
-                            ${renderTimestamp(imp.example_timestamp)}
+
+                            ${imp.examples && imp.examples.length > 0 ? `
+                                <div class="mt-3 space-y-2">
+                                    <p class="text-xs font-semibold text-orange-700 uppercase">Примеры из матча (${imp.examples.length}):</p>
+                                    ${imp.examples.map((ex, idx) => `
+                                        <div class="flex items-start gap-2 p-2 bg-white/50 rounded-lg">
+                                            <span class="text-xs text-orange-600 font-medium">${idx + 1}.</span>
+                                            <div class="flex-1">
+                                                <p class="text-sm text-gray-600">${ex.description}</p>
+                                                ${renderTimestamp(ex.timestamp)}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : `
+                                <p class="text-sm text-gray-600 mt-1">${imp.example_description || ''}</p>
+                                ${renderTimestamp(imp.example_timestamp)}
+                            `}
+
                             <p class="text-sm text-gray-700 mt-3"><strong>Как исправить:</strong> ${imp.how_to_fix}</p>
                             ${imp.drill ? `
                                 <div class="mt-3 p-3 bg-white rounded-lg border border-orange-200">

@@ -53,14 +53,22 @@ class Drill(BaseModel):
     focus: str
 
 
+class ImprovementExample(BaseModel):
+    """Single example of an improvement area"""
+    timestamp: str
+    description: str
+
+
 class Improvement(BaseModel):
     """Improvement area for a player"""
     priority: int
     issue: str
-    example_timestamp: str
-    example_description: str
+    examples: Optional[List["ImprovementExample"]] = None
+    example_timestamp: Optional[str] = None  # Legacy support
+    example_description: Optional[str] = None  # Legacy support
+    frequency: Optional[str] = None
     how_to_fix: str
-    drill: Drill
+    drill: Optional[Drill] = None
 
 
 class Strength(BaseModel):
