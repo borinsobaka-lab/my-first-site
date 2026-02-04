@@ -1,168 +1,351 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Padel Coach AI - Анализ матчей</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Padel Coach AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        },
+                        accent: {
+                            500: '#f97316',
+                            600: '#ea580c',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #166534 0%, #14532d 50%, #0f172a 100%);
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .animate-bounce-slow {
+            animation: bounce 2s infinite;
+        }
+        .animate-pulse-slow {
+            animation: pulse 3s infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        .score-ring {
+            transform: rotate(-90deg);
+        }
+    </style>
 </head>
-<body>
-    <div id="app">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <span class="logo-icon">🎾</span>
-                <h1>Padel Coach AI</h1>
+<body class="h-full font-sans antialiased">
+    <div id="app" class="min-h-full">
+
+        <!-- Login View -->
+        <div id="login-view" class="min-h-screen gradient-bg flex items-center justify-center p-4">
+            <div class="glass rounded-3xl shadow-2xl p-8 md:p-12 w-full max-w-md">
+                <div class="text-center mb-8">
+                    <div class="inline-flex items-center justify-center w-20 h-20 bg-primary-100 rounded-2xl mb-4">
+                        <svg class="w-10 h-10 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl font-bold text-gray-900">Padel Coach AI</h1>
+                    <p class="text-gray-500 mt-2">Персональный тренер по падлу</p>
+                </div>
+
+                <form id="login-form" class="space-y-6">
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                            Пароль для входа
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            required
+                            class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-lg"
+                            placeholder="Введите пароль"
+                        >
+                    </div>
+                    <div id="login-error" class="hidden text-red-500 text-sm text-center bg-red-50 p-3 rounded-xl"></div>
+                    <button
+                        type="submit"
+                        class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary-200"
+                    >
+                        Войти
+                    </button>
+                </form>
             </div>
-            <nav class="nav">
-                <button class="nav-btn active" data-view="analyze">Анализ</button>
-                <button class="nav-btn" data-view="history">История</button>
-            </nav>
-        </header>
+        </div>
 
-        <!-- Main Content -->
-        <main class="main">
-            <!-- Analyze View -->
-            <section id="analyze-view" class="view active">
-                <div class="analyze-container">
-                    <div class="hero">
-                        <h2>Персональный тренер по падлу</h2>
-                        <p>Загрузите YouTube-ссылку на ваш матч и получите профессиональный разбор игры каждого участника</p>
+        <!-- Main App (hidden until authenticated) -->
+        <div id="main-app" class="hidden min-h-screen bg-gray-50">
+            <!-- Header -->
+            <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between items-center h-16">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
+                                <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <span class="font-bold text-xl text-gray-900">Padel Coach AI</span>
+                        </div>
+                        <nav class="flex items-center gap-2">
+                            <button data-view="analyze" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                                Анализ
+                            </button>
+                            <button data-view="history" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-600 hover:text-gray-900 hover:bg-gray-100">
+                                История
+                            </button>
+                            <button id="logout-btn" class="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                </svg>
+                            </button>
+                        </nav>
                     </div>
+                </div>
+            </header>
 
-                    <form id="analyze-form" class="analyze-form">
-                        <div class="input-group">
-                            <label for="youtube-url">YouTube URL</label>
-                            <input
-                                type="url"
-                                id="youtube-url"
-                                placeholder="https://youtube.com/watch?v=..."
-                                required
-                            >
-                            <span class="input-hint">Видео должно быть публичным</span>
+            <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <!-- Analyze View -->
+                <section id="analyze-view" class="view">
+                    <div class="max-w-3xl mx-auto">
+                        <!-- Hero -->
+                        <div class="text-center mb-10">
+                            <h2 class="text-4xl font-bold text-gray-900 mb-4">
+                                Получите профессиональный<br>
+                                <span class="text-primary-600">разбор вашей игры</span>
+                            </h2>
+                            <p class="text-lg text-gray-500">
+                                Загрузите YouTube-ссылку на матч и получите детальный анализ каждого игрока с рекомендациями от AI-тренера
+                            </p>
                         </div>
 
-                        <button type="submit" class="btn-primary">
-                            <span class="btn-text">Анализировать матч</span>
-                            <span class="btn-loader hidden"></span>
+                        <!-- Form Card -->
+                        <div class="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-8 mb-10">
+                            <form id="analyze-form" class="space-y-6">
+                                <div>
+                                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                                        Ссылка на YouTube видео
+                                    </label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <svg class="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                            </svg>
+                                        </div>
+                                        <input
+                                            type="url"
+                                            id="youtube-url"
+                                            required
+                                            class="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-gray-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-lg"
+                                            placeholder="https://youtube.com/watch?v=..."
+                                        >
+                                    </div>
+                                    <p class="mt-2 text-sm text-gray-500">
+                                        Видео должно быть публичным, длительность до 3 часов
+                                    </p>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-6 rounded-xl transition-all transform hover:scale-[1.01] active:scale-[0.99] shadow-lg shadow-primary-200 flex items-center justify-center gap-2"
+                                >
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                    </svg>
+                                    Анализировать матч
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Features -->
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100">
+                                <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="font-semibold text-gray-900 mb-2">Позиционирование</h3>
+                                <p class="text-gray-500 text-sm">Анализ перемещений, зон и синхронности с партнёром</p>
+                            </div>
+                            <div class="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100">
+                                <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mb-4">
+                                    <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="font-semibold text-gray-900 mb-2">Тактика</h3>
+                                <p class="text-gray-500 text-sm">Оценка принятия решений и выбора ударов</p>
+                            </div>
+                            <div class="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100">
+                                <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                                    <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="font-semibold text-gray-900 mb-2">Командная игра</h3>
+                                <p class="text-gray-500 text-sm">Синхронность и взаимодействие с партнёром</p>
+                            </div>
+                            <div class="bg-white rounded-2xl p-6 shadow-lg shadow-gray-100">
+                                <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+                                    <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                    </svg>
+                                </div>
+                                <h3 class="font-semibold text-gray-900 mb-2">Техника</h3>
+                                <p class="text-gray-500 text-sm">Подготовка к ударам и баланс тела</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Progress View -->
+                <section id="progress-view" class="view hidden">
+                    <div class="max-w-xl mx-auto text-center py-12">
+                        <div class="relative w-32 h-32 mx-auto mb-8">
+                            <div class="absolute inset-0 bg-primary-100 rounded-full animate-ping opacity-20"></div>
+                            <div class="relative w-full h-full bg-white rounded-full shadow-xl flex items-center justify-center">
+                                <div class="w-16 h-16 bg-primary-500 rounded-full animate-float flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2" id="progress-title">Анализируем матч...</h2>
+                        <p class="text-gray-500 mb-8" id="progress-status">Загружаем видео</p>
+
+                        <div class="bg-white rounded-2xl p-6 shadow-lg mb-6">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-medium text-gray-600">Прогресс</span>
+                                <span class="text-sm font-bold text-primary-600" id="progress-percent">0%</span>
+                            </div>
+                            <div class="h-3 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-primary-500 to-primary-400 rounded-full transition-all duration-500" id="progress-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-gray-400 mb-6" id="eta-text">Примерное время: 5-10 минут</p>
+
+                        <button id="cancel-btn" class="text-gray-500 hover:text-gray-700 text-sm font-medium transition-colors">
+                            Отменить
                         </button>
-                    </form>
+                    </div>
+                </section>
 
-                    <div class="features">
-                        <div class="feature">
-                            <div class="feature-icon">📍</div>
-                            <h3>Позиционирование</h3>
-                            <p>Анализ перемещений и занятых зон на корте</p>
+                <!-- Results View -->
+                <section id="results-view" class="view hidden">
+                    <div class="max-w-5xl mx-auto">
+                        <!-- Match Summary -->
+                        <div id="match-summary" class="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-8 text-white mb-8">
+                            <h2 class="text-2xl font-bold mb-6">Обзор матча</h2>
+                            <div class="grid md:grid-cols-3 gap-6" id="summary-content"></div>
                         </div>
-                        <div class="feature">
-                            <div class="feature-icon">🎯</div>
-                            <h3>Тактика</h3>
-                            <p>Оценка принятия решений и выбора ударов</p>
+
+                        <!-- Players Section -->
+                        <div class="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
+                            <div class="border-b border-gray-100 p-6">
+                                <h2 class="text-xl font-bold text-gray-900">Анализ игроков</h2>
+                            </div>
+                            <div class="p-2 bg-gray-50 border-b border-gray-100">
+                                <div class="flex gap-2 overflow-x-auto" id="player-tabs"></div>
+                            </div>
+                            <div id="player-content" class="p-6"></div>
                         </div>
-                        <div class="feature">
-                            <div class="feature-icon">🤝</div>
-                            <h3>Командная игра</h3>
-                            <p>Синхронность и взаимодействие с партнёром</p>
+
+                        <!-- Teams Section -->
+                        <div class="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
+                            <div class="border-b border-gray-100 p-6">
+                                <h2 class="text-xl font-bold text-gray-900">Анализ команд</h2>
+                            </div>
+                            <div id="teams-content" class="p-6"></div>
                         </div>
-                        <div class="feature">
-                            <div class="feature-icon">💪</div>
-                            <h3>Техника</h3>
-                            <p>Подготовка к ударам и баланс тела</p>
+
+                        <!-- Patterns Section -->
+                        <div class="bg-white rounded-2xl shadow-xl overflow-hidden mb-8">
+                            <div class="border-b border-gray-100 p-6">
+                                <h2 class="text-xl font-bold text-gray-900">Общие паттерны</h2>
+                            </div>
+                            <div id="patterns-content" class="p-6"></div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="flex justify-center gap-4">
+                            <button id="new-analysis-btn" class="px-6 py-3 border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:border-gray-300 transition-all">
+                                Новый анализ
+                            </button>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- Progress View -->
-            <section id="progress-view" class="view">
-                <div class="progress-container">
-                    <div class="progress-animation">
-                        <div class="ball"></div>
-                    </div>
-                    <h2 id="progress-title">Анализируем ваш матч...</h2>
-                    <p id="progress-status">Загружаем видео в систему</p>
-
-                    <div class="progress-bar-container">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progress-fill"></div>
+                <!-- History View -->
+                <section id="history-view" class="view hidden">
+                    <div class="max-w-3xl mx-auto">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-6">История анализов</h2>
+                        <div id="history-list" class="space-y-4"></div>
+                        <div id="history-empty" class="hidden text-center py-12 text-gray-500">
+                            <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                            </svg>
+                            <p>Пока нет анализов</p>
                         </div>
-                        <span class="progress-percent" id="progress-percent">0%</span>
                     </div>
+                </section>
 
-                    <p class="eta" id="eta">Примерное время ожидания: ~5-10 минут</p>
-
-                    <button class="btn-secondary" id="cancel-btn">Отменить</button>
-                </div>
-            </section>
-
-            <!-- Results View -->
-            <section id="results-view" class="view">
-                <div class="results-container">
-                    <!-- Match Summary -->
-                    <div class="match-summary" id="match-summary">
-                        <h2>Обзор матча</h2>
-                        <div class="summary-content"></div>
+                <!-- Error View -->
+                <section id="error-view" class="view hidden">
+                    <div class="max-w-md mx-auto text-center py-12">
+                        <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2" id="error-title">Произошла ошибка</h2>
+                        <p class="text-gray-500 mb-8" id="error-message">Что-то пошло не так. Попробуйте ещё раз.</p>
+                        <button id="retry-btn" class="px-6 py-3 bg-primary-600 text-white font-semibold rounded-xl hover:bg-primary-700 transition-all">
+                            Попробовать снова
+                        </button>
                     </div>
-
-                    <!-- Player Tabs -->
-                    <div class="players-section">
-                        <h2>Анализ игроков</h2>
-                        <div class="player-tabs" id="player-tabs"></div>
-                        <div class="player-content" id="player-content"></div>
-                    </div>
-
-                    <!-- Team Analysis -->
-                    <div class="teams-section" id="teams-section">
-                        <h2>Анализ команд</h2>
-                        <div class="teams-content" id="teams-content"></div>
-                    </div>
-
-                    <!-- Patterns -->
-                    <div class="patterns-section" id="patterns-section">
-                        <h2>Общие паттерны</h2>
-                        <div class="patterns-content" id="patterns-content"></div>
-                    </div>
-
-                    <!-- Actions -->
-                    <div class="results-actions">
-                        <button class="btn-secondary" id="new-analysis-btn">Новый анализ</button>
-                        <button class="btn-primary" id="download-pdf-btn">Скачать PDF</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- History View -->
-            <section id="history-view" class="view">
-                <div class="history-container">
-                    <h2>История анализов</h2>
-                    <div class="history-list" id="history-list">
-                        <p class="empty-state">Загрузка...</p>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Error View -->
-            <section id="error-view" class="view">
-                <div class="error-container">
-                    <div class="error-icon">⚠️</div>
-                    <h2 id="error-title">Произошла ошибка</h2>
-                    <p id="error-message">Что-то пошло не так. Попробуйте ещё раз.</p>
-                    <button class="btn-primary" id="retry-btn">Попробовать снова</button>
-                </div>
-            </section>
-        </main>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <p>Padel Coach AI &copy; 2024 | Анализ на базе Google Gemini</p>
-        </footer>
+                </section>
+            </main>
+        </div>
     </div>
 
-    <script src="components/progress.js"></script>
-    <script src="components/results.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
