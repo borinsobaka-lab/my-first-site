@@ -136,8 +136,9 @@ async def login(request: LoginRequest, response: Response):
             key="padel_session",
             value=token,
             httponly=True,
-            secure=True,
-            samesite="strict",
+            secure=False,
+            samesite="lax",
+            path="/",
             max_age=int(SESSION_DURATION.total_seconds())
         )
         return {"success": True, "message": "Добро пожаловать!"}
@@ -150,7 +151,7 @@ async def logout(response: Response, session: Optional[str] = Cookie(default=Non
     """Logout and clear session"""
     if session and session in active_sessions:
         del active_sessions[session]
-    response.delete_cookie("padel_session")
+    response.delete_cookie("padel_session", path="/")
     return {"success": True}
 
 
