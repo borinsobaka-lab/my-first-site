@@ -70,24 +70,42 @@ class GeminiService:
 
     def _call_gemini_sync(self, youtube_url: str) -> Any:
         """Synchronous call to Gemini API"""
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=types.Content(
-                parts=[
-                    types.Part(
-                        file_data=types.FileData(
-                            file_uri=youtube_url
-                        )
-                    ),
-                    types.Part(text=PADEL_ANALYSIS_PROMPT)
-                ]
-            ),
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.3,
+        # Normalize URL to clean format
+        clean_url = normalize_youtube_url(youtube_url)
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=types.Content(
+                    parts=[
+                        types.Part(
+                            file_data=types.FileData(
+                                file_uri=clean_url
+                            )
+                        ),
+                        types.Part(text=PADEL_ANALYSIS_PROMPT)
+                    ]
+                ),
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.3,
+                )
             )
-        )
-        return response
+            return response
+        except Exception as e:
+            error_str = str(e)
+            # Provide user-friendly error messages
+            if "MIME type" in error_str and "text/html" in error_str:
+                raise GeminiError(
+                    "Видео недоступно или приватное. Убедитесь, что видео публичное "
+                    "и доступно для просмотра без авторизации."
+                )
+            elif "400" in error_str or "INVALID_ARGUMENT" in error_str:
+                raise GeminiError(
+                    "Не удалось загрузить видео. Проверьте, что ссылка корректная "
+                    "и видео доступно публично."
+                )
+            raise
 
     def _parse_response(self, response: Any) -> Dict[str, Any]:
         """Parse and validate the Gemini response"""
@@ -186,3 +204,16 @@ def extract_video_id(url: str) -> Optional[str]:
             return match.group(1)
 
     return None
+
+
+def normalize_youtube_url(url: str) -> str:
+    """
+    Normalize YouTube URL to the standard format expected by Gemini.
+    Removes extra query parameters and converts to standard watch URL.
+    """
+    video_id = extract_video_id(url)
+    if not video_id:
+        raise ValueError("Не удалось извлечь ID видео из URL")
+
+    # Return clean URL in standard format
+    return f"https://www.youtube.com/watch?v={video_id}"
