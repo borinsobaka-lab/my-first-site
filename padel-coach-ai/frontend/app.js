@@ -821,21 +821,28 @@ async function loadHistory() {
 
         emptyState.classList.add('hidden');
         listContainer.innerHTML = data.items.map(item => `
-            <div class="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer" data-task-id="${item.task_id}">
-                <div class="flex items-center justify-between">
-                    <div class="flex-1 min-w-0">
+            <div class="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow" data-task-id="${item.task_id}">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="flex-1 min-w-0 cursor-pointer history-item-content" data-task-id="${item.task_id}">
                         <p class="text-sm font-medium text-gray-900 truncate">${item.youtube_url}</p>
                         <p class="text-xs text-gray-500 mt-1">${new Date(item.created_at).toLocaleString('ru-RU')}</p>
                     </div>
-                    <span class="ml-4 px-3 py-1 rounded-full text-xs font-medium ${getStatusClasses(item.status)}">
-                        ${getStatusText(item.status)}
-                    </span>
+                    <div class="flex items-center gap-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-medium ${getStatusClasses(item.status)}">
+                            ${getStatusText(item.status)}
+                        </span>
+                        <button class="delete-btn p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" data-task-id="${item.task_id}" title="Удалить">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         `).join('');
 
-        // Click handlers for history items
-        listContainer.querySelectorAll('[data-task-id]').forEach(item => {
+        // Click handlers for history items (open result)
+        listContainer.querySelectorAll('.history-item-content').forEach(item => {
             item.addEventListener('click', async () => {
                 const taskId = item.dataset.taskId;
                 currentTaskId = taskId;
@@ -847,8 +854,40 @@ async function loadHistory() {
             });
         });
 
+        // Click handlers for delete buttons
+        listContainer.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const taskId = btn.dataset.taskId;
+                await confirmAndDeleteAnalysis(taskId);
+            });
+        });
+
     } catch (error) {
         listContainer.innerHTML = '<p class="text-red-500 text-center py-4">Ошибка загрузки истории</p>';
+    }
+}
+
+async function confirmAndDeleteAnalysis(taskId) {
+    if (!confirm('Вы уверены, что хотите удалить этот анализ? Это действие нельзя отменить.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/analysis/${taskId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            // Refresh the history list
+            await loadHistory();
+        } else {
+            const data = await response.json();
+            alert(data.detail || 'Не удалось удалить анализ');
+        }
+    } catch (error) {
+        alert('Ошибка при удалении анализа');
     }
 }
 
