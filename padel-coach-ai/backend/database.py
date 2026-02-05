@@ -23,6 +23,7 @@ async def init_db():
                 progress INTEGER DEFAULT 0,
                 error_message TEXT,
                 result_json TEXT,
+                player_names TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP
@@ -38,6 +39,12 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_analyses_created
             ON analyses(created_at DESC)
         """)
+
+        # Migration: add player_names column if it doesn't exist
+        try:
+            await db.execute("ALTER TABLE analyses ADD COLUMN player_names TEXT")
+        except:
+            pass  # Column already exists
 
         await db.commit()
 
@@ -102,6 +109,10 @@ async def get_analysis(task_id: str) -> Optional[Dict[str, Any]]:
                 result = dict(row)
                 if result.get('result_json'):
                     result['result_json'] = json.loads(result['result_json'])
+                if result.get('player_names'):
+                    result['player_names'] = json.loads(result['player_names'])
+                else:
+                    result['player_names'] = {}
                 return result
             return None
 
@@ -151,3 +162,39 @@ async def delete_analysis(task_id: str) -> bool:
         )
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def get_player_names(task_id: str) -> Dict[str, str]:
+    """Get custom player names for an analysis"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        async with db.execute(
+            "SELECT player_names FROM analyses WHERE task_id = ?",
+            (task_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row and row[0]:
+                return json.loads(row[0])
+            return {}
+
+
+async def update_player_name(task_id: str, player_id: str, new_name: str) -> bool:
+    """Update a single player's custom name"""
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        # Get existing names
+        async with db.execute(
+            "SELECT player_names FROM analyses WHERE task_id = ?",
+            (task_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return False
+
+            names = json.loads(row[0]) if row[0] else {}
+            names[player_id] = new_name
+
+            await db.execute(
+                "UPDATE analyses SET player_names = ? WHERE task_id = ?",
+                (json.dumps(names, ensure_ascii=False), task_id)
+            )
+            await db.commit()
+            return True

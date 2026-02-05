@@ -8,6 +8,24 @@ const API_BASE = '';
 let currentTaskId = null;
 let pollInterval = null;
 let currentVideoUrl = null;
+let playerNames = {}; // Custom player names mapping
+
+// Get display name for a player (custom name or original ID)
+function getPlayerDisplayName(playerId) {
+    return playerNames[playerId] || playerId;
+}
+
+// Replace all player IDs with display names in text
+function replacePlayerNames(text) {
+    if (!text) return text;
+    let result = text;
+    for (const [id, name] of Object.entries(playerNames)) {
+        if (name) {
+            result = result.replace(new RegExp(id, 'g'), name);
+        }
+    }
+    return result;
+}
 
 // DOM Elements
 const loginView = document.getElementById('login-view');
@@ -287,11 +305,31 @@ async function loadResult() {
 
         const data = await response.json();
         currentVideoUrl = data.youtube_url;
+        playerNames = data.player_names || {};
         renderResults(data.analysis);
         showView('results');
 
     } catch (error) {
         showError('Ошибка загрузки результатов', error.message);
+    }
+}
+
+async function renamePlayer(playerId, newName) {
+    try {
+        const response = await fetch(`${API_BASE}/api/analysis/${currentTaskId}/rename-player`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ player_id: playerId, new_name: newName })
+        });
+
+        if (response.ok) {
+            playerNames[playerId] = newName;
+            // Reload results to update all names
+            await loadResult();
+        }
+    } catch (error) {
+        console.error('Failed to rename player:', error);
     }
 }
 
@@ -379,7 +417,7 @@ function renderPlayers(players) {
             class="player-tab px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${index === 0 ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}"
             data-player-index="${index}"
         >
-            ${player.id}
+            ${getPlayerDisplayName(player.id)}
             <span class="ml-1 text-xs opacity-70">К${player.team}</span>
         </button>
     `).join('');
@@ -408,6 +446,19 @@ function renderPlayers(players) {
             });
         });
     });
+
+    // Edit name handlers
+    contentContainer.querySelectorAll('.edit-player-name').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const playerId = btn.dataset.playerId;
+            const currentName = getPlayerDisplayName(playerId);
+            const newName = prompt('Введите имя игрока:', currentName === playerId ? '' : currentName);
+            if (newName !== null && newName.trim() !== '') {
+                await renamePlayer(playerId, newName.trim());
+            }
+        });
+    });
 }
 
 function renderPlayerCard(player, isActive) {
@@ -418,12 +469,21 @@ function renderPlayerCard(player, isActive) {
         technique: 'Техника'
     };
 
+    const displayName = getPlayerDisplayName(player.id);
+
     return `
         <div class="player-card ${isActive ? '' : 'hidden'}">
             <!-- Header -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-100">
                 <div>
-                    <h3 class="text-xl font-bold text-gray-900">${player.id}</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-xl font-bold text-gray-900">${displayName}</h3>
+                        <button class="edit-player-name p-1 text-gray-400 hover:text-primary-600 transition-colors" data-player-id="${player.id}" title="Переименовать">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <p class="text-gray-500">${player.description}</p>
                     ${player.estimated_level ? `<p class="text-sm text-primary-600 font-medium mt-1">Уровень: ${player.estimated_level}</p>` : ''}
                 </div>
@@ -683,7 +743,7 @@ function renderTeams(teams) {
                             Синергия: ${team.partnership_score}/9
                         </span>
                     </div>
-                    <p class="text-sm text-gray-500 mb-2">${team.players.join(' + ')}</p>
+                    <p class="text-sm text-gray-500 mb-2">${team.players.map(p => getPlayerDisplayName(p)).join(' + ')}</p>
                     ${team.synergy_style ? `<p class="text-sm text-primary-600 font-medium mb-3">${team.synergy_style}</p>` : ''}
                     ${team.synergy_description ? `<p class="text-sm text-gray-700 mb-4">${team.synergy_description}</p>` : ''}
 
@@ -772,7 +832,7 @@ function renderPatterns(patterns) {
                         <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium whitespace-nowrap">${pattern.frequency}</span>
                     </div>
                     ${pattern.description ? `<p class="text-sm text-gray-600 mb-2">${pattern.description}</p>` : ''}
-                    <p class="text-sm text-gray-500 mb-3">Затронутые игроки: ${pattern.affected_players.join(', ')}</p>
+                    <p class="text-sm text-gray-500 mb-3">Затронутые игроки: ${pattern.affected_players.map(p => getPlayerDisplayName(p)).join(', ')}</p>
 
                     ${pattern.timestamps && pattern.timestamps.length > 0 ? `
                     <div class="mb-3 p-2 bg-white rounded-lg">

@@ -250,7 +250,22 @@ async def get_result(task_id: str, _: bool = Depends(require_auth)):
         "created_at": analysis["created_at"],
         "completed_at": analysis["completed_at"],
         "analysis": result,
+        "player_names": analysis.get("player_names", {}),
     }
+
+
+class RenamePlayerRequest(BaseModel):
+    player_id: str
+    new_name: str
+
+
+@app.post("/api/analysis/{task_id}/rename-player")
+async def rename_player(task_id: str, request: RenamePlayerRequest, _: bool = Depends(require_auth)):
+    """Rename a player in an analysis"""
+    success = await db.update_player_name(task_id, request.player_id, request.new_name)
+    if not success:
+        raise HTTPException(status_code=404, detail="Анализ не найден")
+    return {"success": True, "player_id": request.player_id, "new_name": request.new_name}
 
 
 @app.get("/api/history", response_model=HistoryResponse)
