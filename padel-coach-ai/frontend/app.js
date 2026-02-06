@@ -10,21 +10,46 @@ let pollInterval = null;
 let currentVideoUrl = null;
 let playerNames = {}; // Custom player names mapping
 
-// Get display name for a player (custom name or original ID)
+// Get letter suffix from player ID (e.g., "Игрок_A" -> "A")
+function getPlayerLetter(playerId) {
+    const match = playerId.match(/[ABCD]$/);
+    return match ? match[0] : '';
+}
+
+// Get display name for a player (custom name with letter or original ID)
 function getPlayerDisplayName(playerId) {
+    const customName = playerNames[playerId];
+    if (customName) {
+        const letter = getPlayerLetter(playerId);
+        return letter ? `${customName} (${letter})` : customName;
+    }
+    return playerId;
+}
+
+// Get short display name (just the name, for compact display)
+function getPlayerShortName(playerId) {
     return playerNames[playerId] || playerId;
 }
 
 // Replace all player IDs with display names in text
 function replacePlayerNames(text) {
     if (!text) return text;
-    let result = text;
-    for (const [id, name] of Object.entries(playerNames)) {
+    let result = String(text);
+    // Sort by ID length descending to replace longer IDs first (avoid partial replacements)
+    const sortedEntries = Object.entries(playerNames).sort((a, b) => b[0].length - a[0].length);
+    for (const [id, name] of sortedEntries) {
         if (name) {
-            result = result.replace(new RegExp(id, 'g'), name);
+            const letter = getPlayerLetter(id);
+            const displayName = letter ? `${name} (${letter})` : name;
+            result = result.replace(new RegExp(id, 'g'), displayName);
         }
     }
     return result;
+}
+
+// Safe text renderer that applies player name replacement
+function t(text) {
+    return replacePlayerNames(text || '');
 }
 
 // DOM Elements
@@ -559,22 +584,22 @@ function renderPlayerCard(player, isActive) {
                     ${player.strengths.map(strength => `
                         <div class="p-4 bg-green-50 border-l-4 border-green-500 rounded-r-xl">
                             ${strength.category ? `<span class="text-xs text-green-700 font-medium uppercase">${strength.category}</span>` : ''}
-                            <p class="font-medium text-gray-900">${strength.point}</p>
-                            ${strength.why_important ? `<p class="text-sm text-green-700 mt-1">${strength.why_important}</p>` : ''}
+                            <p class="font-medium text-gray-900">${t(strength.point)}</p>
+                            ${strength.why_important ? `<p class="text-sm text-green-700 mt-1">${t(strength.why_important)}</p>` : ''}
                             ${strength.examples && strength.examples.length > 0 ? `
                                 <div class="mt-2 space-y-1">
                                     ${strength.examples.map(ex => `
                                         <div class="flex items-start gap-2 text-sm">
                                             <span class="text-green-600">•</span>
                                             <div>
-                                                <span class="text-gray-600">${ex.description}</span>
+                                                <span class="text-gray-600">${t(ex.description)}</span>
                                                 ${renderTimestamp(ex.timestamp)}
                                             </div>
                                         </div>
                                     `).join('')}
                                 </div>
                             ` : `
-                                ${strength.example_description ? `<p class="text-sm text-gray-600 mt-1">${strength.example_description}</p>` : ''}
+                                ${strength.example_description ? `<p class="text-sm text-gray-600 mt-1">${t(strength.example_description)}</p>` : ''}
                                 ${renderTimestamp(strength.example_timestamp)}
                             `}
                         </div>
@@ -597,7 +622,7 @@ function renderPlayerCard(player, isActive) {
                                 </span>
                                 ${imp.frequency ? `<span class="inline-block px-2 py-1 bg-orange-200 text-orange-800 text-xs font-medium rounded">${imp.frequency}</span>` : ''}
                             </div>
-                            <p class="font-medium text-gray-900">${imp.issue}</p>
+                            <p class="font-medium text-gray-900">${t(imp.issue)}</p>
 
                             ${imp.examples && imp.examples.length > 0 ? `
                                 <div class="mt-3 space-y-2">
@@ -606,20 +631,20 @@ function renderPlayerCard(player, isActive) {
                                         <div class="flex items-start gap-2 p-2 bg-white/50 rounded-lg">
                                             <span class="text-xs text-orange-600 font-medium">${idx + 1}.</span>
                                             <div class="flex-1">
-                                                <p class="text-sm text-gray-600">${ex.description}</p>
+                                                <p class="text-sm text-gray-600">${t(ex.description)}</p>
                                                 ${renderTimestamp(ex.timestamp)}
                                             </div>
                                         </div>
                                     `).join('')}
                                 </div>
                             ` : `
-                                <p class="text-sm text-gray-600 mt-1">${imp.example_description || ''}</p>
+                                <p class="text-sm text-gray-600 mt-1">${t(imp.example_description || '')}</p>
                                 ${renderTimestamp(imp.example_timestamp)}
                             `}
 
-                            ${imp.impact ? `<p class="text-sm text-red-700 mt-2"><strong>Влияние:</strong> ${imp.impact}</p>` : ''}
-                            ${imp.root_cause ? `<p class="text-sm text-gray-600 mt-1"><strong>Причина:</strong> ${imp.root_cause}</p>` : ''}
-                            <p class="text-sm text-gray-700 mt-3"><strong>Как исправить:</strong> ${imp.how_to_fix}</p>
+                            ${imp.impact ? `<p class="text-sm text-red-700 mt-2"><strong>Влияние:</strong> ${t(imp.impact)}</p>` : ''}
+                            ${imp.root_cause ? `<p class="text-sm text-gray-600 mt-1"><strong>Причина:</strong> ${t(imp.root_cause)}</p>` : ''}
+                            <p class="text-sm text-gray-700 mt-3"><strong>Как исправить:</strong> ${t(imp.how_to_fix)}</p>
                             ${imp.drill ? `
                                 <div class="mt-3 p-3 bg-white rounded-lg border border-orange-200">
                                     <p class="font-medium text-orange-700 text-sm">Упражнение: ${imp.drill.name}</p>
@@ -647,8 +672,8 @@ function renderPlayerCard(player, isActive) {
                             <span class="text-lg">${getMomentIcon(moment.type)}</span>
                             <div class="flex-1">
                                 ${moment.category ? `<span class="text-xs font-medium text-gray-500 uppercase">${moment.category}</span>` : ''}
-                                <p class="text-sm text-gray-700">${moment.description}</p>
-                                ${moment.lesson ? `<p class="text-xs text-blue-600 mt-1 italic">${moment.lesson}</p>` : ''}
+                                <p class="text-sm text-gray-700">${t(moment.description)}</p>
+                                ${moment.lesson ? `<p class="text-xs text-blue-600 mt-1 italic">${t(moment.lesson)}</p>` : ''}
                                 ${renderTimestamp(moment.timestamp)}
                             </div>
                         </div>
@@ -660,21 +685,21 @@ function renderPlayerCard(player, isActive) {
             ${player.mental_notes ? `
             <div class="mb-6 p-4 bg-purple-50 rounded-xl border-l-4 border-purple-400">
                 <h4 class="font-semibold text-purple-900 mb-2 text-sm">Ментальные заметки</h4>
-                <p class="text-sm text-gray-700">${player.mental_notes}</p>
+                <p class="text-sm text-gray-700">${t(player.mental_notes)}</p>
             </div>
             ` : ''}
 
             <!-- Progress Focus -->
             <div class="p-6 bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl text-white text-center mb-4">
                 <p class="text-sm opacity-90 mb-2">Фокус на ближайший месяц</p>
-                <p class="font-semibold">${player.progress_focus}</p>
+                <p class="font-semibold">${t(player.progress_focus)}</p>
             </div>
 
             <!-- Next Level Requirements -->
             ${player.next_level_requirements ? `
             <div class="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200">
                 <p class="text-sm text-amber-800 font-medium mb-1">Для выхода на следующий уровень</p>
-                <p class="text-sm text-gray-700">${player.next_level_requirements}</p>
+                <p class="text-sm text-gray-700">${t(player.next_level_requirements)}</p>
             </div>
             ` : ''}
         </div>
@@ -744,8 +769,8 @@ function renderTeams(teams) {
                         </span>
                     </div>
                     <p class="text-sm text-gray-500 mb-2">${team.players.map(p => getPlayerDisplayName(p)).join(' + ')}</p>
-                    ${team.synergy_style ? `<p class="text-sm text-primary-600 font-medium mb-3">${team.synergy_style}</p>` : ''}
-                    ${team.synergy_description ? `<p class="text-sm text-gray-700 mb-4">${team.synergy_description}</p>` : ''}
+                    ${team.synergy_style ? `<p class="text-sm text-primary-600 font-medium mb-3">${t(team.synergy_style)}</p>` : ''}
+                    ${team.synergy_description ? `<p class="text-sm text-gray-700 mb-4">${t(team.synergy_description)}</p>` : ''}
 
                     <!-- Team metrics -->
                     ${(team.movement_sync || team.center_coverage || team.communication_level) ? `
@@ -774,27 +799,27 @@ function renderTeams(teams) {
                     <div class="space-y-3">
                         <div class="p-3 bg-green-50 rounded-lg">
                             <p class="text-xs text-green-700 font-medium mb-1">Сильная сторона</p>
-                            <p class="text-sm text-gray-700">${team.strength}</p>
+                            <p class="text-sm text-gray-700">${t(team.strength)}</p>
                         </div>
                         <div class="p-3 bg-orange-50 rounded-lg">
                             <p class="text-xs text-orange-700 font-medium mb-1">Слабая сторона</p>
-                            <p class="text-sm text-gray-700">${team.weakness}</p>
+                            <p class="text-sm text-gray-700">${t(team.weakness)}</p>
                         </div>
                         ${team.dangerous_pattern ? `
                         <div class="p-3 bg-red-50 rounded-lg border border-red-200">
                             <p class="text-xs text-red-700 font-medium mb-1">Уязвимость</p>
-                            <p class="text-sm text-gray-700">${team.dangerous_pattern}</p>
+                            <p class="text-sm text-gray-700">${t(team.dangerous_pattern)}</p>
                         </div>
                         ` : ''}
                         <div class="p-3 bg-blue-50 rounded-lg">
                             <p class="text-xs text-blue-700 font-medium mb-1">Рекомендация</p>
-                            <p class="text-sm text-gray-700">${team.recommendation}</p>
+                            <p class="text-sm text-gray-700">${t(team.recommendation)}</p>
                         </div>
                         ${team.pair_drill ? `
                         <div class="p-3 bg-purple-50 rounded-lg border border-purple-200">
                             <p class="text-xs text-purple-700 font-medium mb-1">Упражнение для пары</p>
-                            <p class="text-sm font-medium text-gray-900">${team.pair_drill.name}</p>
-                            <p class="text-sm text-gray-600">${team.pair_drill.description}</p>
+                            <p class="text-sm font-medium text-gray-900">${t(team.pair_drill.name)}</p>
+                            <p class="text-sm text-gray-600">${t(team.pair_drill.description)}</p>
                         </div>
                         ` : ''}
                     </div>
@@ -827,11 +852,11 @@ function renderPatterns(patterns) {
                     <div class="flex items-start justify-between gap-4 mb-2">
                         <div>
                             ${pattern.pattern_type ? `<span class="text-xs font-medium text-primary-600 uppercase">${pattern.pattern_type}</span>` : ''}
-                            <h5 class="font-medium text-gray-900">${pattern.pattern}</h5>
+                            <h5 class="font-medium text-gray-900">${t(pattern.pattern)}</h5>
                         </div>
                         <span class="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs font-medium whitespace-nowrap">${pattern.frequency}</span>
                     </div>
-                    ${pattern.description ? `<p class="text-sm text-gray-600 mb-2">${pattern.description}</p>` : ''}
+                    ${pattern.description ? `<p class="text-sm text-gray-600 mb-2">${t(pattern.description)}</p>` : ''}
                     <p class="text-sm text-gray-500 mb-3">Затронутые игроки: ${pattern.affected_players.map(p => getPlayerDisplayName(p)).join(', ')}</p>
 
                     ${pattern.timestamps && pattern.timestamps.length > 0 ? `
@@ -844,15 +869,15 @@ function renderPatterns(patterns) {
                     ` : ''}
 
                     ${pattern.consequence ? `
-                    <p class="text-sm text-orange-700 mb-2"><strong>Последствие:</strong> ${pattern.consequence}</p>
+                    <p class="text-sm text-orange-700 mb-2"><strong>Последствие:</strong> ${t(pattern.consequence)}</p>
                     ` : ''}
 
                     <div class="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
-                        <p class="text-sm text-gray-700"><strong>Решение:</strong> ${pattern.solution}</p>
+                        <p class="text-sm text-gray-700"><strong>Решение:</strong> ${t(pattern.solution)}</p>
                     </div>
 
                     ${pattern.practice_focus ? `
-                    <p class="text-sm text-blue-600 mt-2"><strong>На тренировке:</strong> ${pattern.practice_focus}</p>
+                    <p class="text-sm text-blue-600 mt-2"><strong>На тренировке:</strong> ${t(pattern.practice_focus)}</p>
                     ` : ''}
                 </div>
             `).join('')}
